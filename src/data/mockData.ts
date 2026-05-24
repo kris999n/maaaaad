@@ -32,6 +32,7 @@ export interface Recipe {
   healthScore?: number;
   holdbarhed?: string;
   kanFryses?: string;
+  url?: string;
   tips?: {
     healthier: string;
     cheaper: string;

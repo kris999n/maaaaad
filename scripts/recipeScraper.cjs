@@ -206,9 +206,10 @@ async function scrapeValdemarsroRecipe(url) {
 
     return {
       id: `rec_valdemarsro_live_${cleanSlug}`,
-      name: `Valdemarsro ${title}`,
+      name: title,
       description: $('meta[name="description"]').attr('content') || `En lækker opskrift på ${title.toLowerCase()} fyldt med god smag og sprøde ingredienser.`,
       image: imageUrl,
+      url: url,
       prepTime: prepTime,
       servings: servings,
       tags: ['Valdemarsro', 'Live Scraped', 'Hverdagsmad'],
@@ -304,11 +305,16 @@ async function scrapeArlaRecipe(url) {
     const cleanUrl = url.replace('https://www.arla.dk/opskrifter/', '');
     const cleanSlug = cleanUrl.replace(/\//g, '');
 
+    const arlaImage = (recipeNode.image && typeof recipeNode.image === 'object' && recipeNode.image.url) 
+      ? recipeNode.image.url 
+      : (Array.isArray(recipeNode.image) ? recipeNode.image[0] : (recipeNode.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500'));
+
     return {
       id: `rec_arla_live_${cleanSlug}`,
-      name: `Arla ${recipeNode.name}`,
+      name: recipeNode.name,
       description: recipeNode.description || `En herlig opskrift på ${recipeNode.name.toLowerCase()} fra Arlas inspirationskøkken.`,
-      image: recipeNode.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
+      image: arlaImage,
+      url: url,
       prepTime: prep + cook,
       servings: servings,
       tags: ['Arla', 'Live Scraped', 'Hverdagsmad'],
@@ -388,9 +394,10 @@ function generatePremiumFallbacks() {
     // --- VALDEMARSRO RECIPES ---
     {
       id: 'rec_valdemarsro_1',
-      name: 'Valdemarsro Kylling i Karry',
+      name: 'Kylling i Karry',
       description: 'En sand hverdagsfavorit fra Valdemarsro! Cremet og krydret karrysauce med masser af smag, mør kylling og sprøde æbler.',
       image: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.valdemarsro.dk/kylling-med-parmesan/', // matching target fallback url
       prepTime: 35,
       servings: 4,
       tags: ['Valdemarsro', 'Klassisk', 'Familiefavorit', 'Kylling'],
@@ -421,9 +428,10 @@ function generatePremiumFallbacks() {
     },
     {
       id: 'rec_valdemarsro_2',
-      name: 'Valdemarsro Indisk Dahl',
+      name: 'Indisk Dahl',
       description: 'En utrolig fyldig, cremet og varmende vegetarisk dahl spækket med proteiner fra røde linser og toppet med kokosflager.',
       image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.valdemarsro.dk/dhal/',
       prepTime: 30,
       servings: 4,
       tags: ['Valdemarsro', 'Vegetarisk', 'Sund', 'Asiatisk'],
@@ -453,9 +461,10 @@ function generatePremiumFallbacks() {
     },
     {
       id: 'rec_valdemarsro_3',
-      name: 'Valdemarsro Hverdags-Bolognese',
+      name: 'Hverdags-Bolognese',
       description: 'Hemmeligheden bag Valdemarsros populære bolognese er de finthakkede grøntsager, der giver en fantastisk dybde og sødme til kødsovsen.',
       image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.valdemarsro.dk/salat-med-bagte-tomater-og-burrata/', // fallback recipe match url
       prepTime: 45,
       servings: 4,
       tags: ['Valdemarsro', 'Pasta', 'Familiefavorit', 'Italiensk'],
@@ -464,7 +473,7 @@ function generatePremiumFallbacks() {
       kanFryses: 'Ja',
       tips: {
         healthier: 'Brug fuldkornspasta og tilføj ekstra revet squash og gulerod direkte i sovsen for mere fiber.',
-        cheaper: 'Stræk farsen ved at erstatte 200g oksekød med 1 dåse drænede linser eller revne rodfrugter.'
+        cheaper: 'Stræk farsen ver at erstatte 200g oksekød med 1 dåse drænede linser eller revne rodfrugter.'
       },
       ingredients: [
         { name: 'Hakket oksekød', displayName: 'Hakket oksekød 8-12%', amount: '400g' },
@@ -485,9 +494,10 @@ function generatePremiumFallbacks() {
     },
     {
       id: 'rec_valdemarsro_4',
-      name: 'Valdemarsro Luksus Lasagne',
+      name: 'Luksus Lasagne',
       description: 'Den ultimative lasagne med en dyb, fyldig kødsovs, cremet bechamelsauce og et perfekt gyldent ostelåg på toppen.',
       image: 'https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.valdemarsro.dk/sur-soed-groentsager/', // fallback URL
       prepTime: 60,
       servings: 4,
       tags: ['Valdemarsro', 'Ovnret', 'Populær', 'Pasta'],
@@ -516,9 +526,10 @@ function generatePremiumFallbacks() {
     },
     {
       id: 'rec_arla_1',
-      name: 'Arla Svensk Pølseret',
+      name: 'Svensk Pølseret',
       description: 'En ægte hverdags-klassiker fra Arla! Cremet, børnevenlig og utrolig velsmagende kartoffelret med pølsestykker og paprika.',
       image: 'https://images.unsplash.com/photo-1580143679779-a28b217b84fe?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.arla.dk/opskrifter/svensk-polseret/',
       prepTime: 30,
       servings: 4,
       tags: ['Arla', 'Børnevenlig', 'Gryderet', 'Kartofler'],
@@ -547,9 +558,10 @@ function generatePremiumFallbacks() {
     },
     {
       id: 'rec_arla_2',
-      name: 'Arla Boller i Karry',
+      name: 'Boller i Karry',
       description: 'Arlas klassiske opskrift på boller i karry. Saftige kødboller kogt i en duftende, fløjlsblød karrysovs baseret på mælk og bouillon.',
       image: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=500&auto=format&fit=crop&q=80',
+      url: 'https://www.arla.dk/opskrifter/boller-i-karry/',
       prepTime: 40,
       servings: 4,
       tags: ['Arla', 'Klassisk', 'Dansk', 'Familiefavorit'],
@@ -599,12 +611,32 @@ function generateProceduralRecipes(count, existingRecipes) {
 
   const creators = ['Valdemarsro', 'Arla'];
 
+  const imageMapValdemarsro = {
+    'Wok med kylling': 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&auto=format&fit=crop&q=80',
+    'Laksefilet med grønt': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=500&auto=format&fit=crop&q=80',
+    'Vegetarisk dahl': 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80',
+    'Hakkebøf med kartofler': 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500&auto=format&fit=crop&q=80',
+    'Cremet pastaret med bacon': 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80',
+    'Frikadeller med stuvede porrer': 'https://images.unsplash.com/photo-1529042410759-befb1204b468?w=500&auto=format&fit=crop&q=80',
+    'Broccoli tærte': 'https://images.unsplash.com/photo-1627308595229-7830a5c91f9f?w=500&auto=format&fit=crop&q=80'
+  };
+
+  const imageMapArla = {
+    'Wok med kylling': 'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?w=500&auto=format&fit=crop&q=80',
+    'Laksefilet med grønt': 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&auto=format&fit=crop&q=80',
+    'Vegetarisk dahl': 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=500&auto=format&fit=crop&q=80',
+    'Hakkebøf med kartofler': 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=500&auto=format&fit=crop&q=80',
+    'Cremet pastaret med bacon': 'https://images.unsplash.com/photo-1612874742237-6526221588e3?w=500&auto=format&fit=crop&q=80',
+    'Frikadeller med stuvede porrer': 'https://images.unsplash.com/photo-1608897013039-887f21d8c804?w=500&auto=format&fit=crop&q=80',
+    'Broccoli tærte': 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80'
+  };
+
   for (let i = 0; i < count; i++) {
     const creator = creators[i % creators.length];
     const dishType = dishTypes[i % dishTypes.length];
     const mod = modifiers[(i + 3) % modifiers.length];
     
-    const name = `${creator} ${mod} ${dishType.name}`;
+    const name = `${mod} ${dishType.name}`; // Clean title without brand prefix!
     const prep = 20 + ((i * 7) % 35);
     const servings = 2 + (i % 3) * 2;
     const health = 4 + (i % 6);
@@ -634,13 +666,21 @@ function generateProceduralRecipes(count, existingRecipes) {
       { name: 'Olie', displayName: 'Olivenolie til stegning', amount: '2 spsk', isBasis: true }
     );
 
+    const dishImage = (creator === 'Valdemarsro' ? imageMapValdemarsro[dishType.name] : imageMapArla[dishType.name]) || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500';
+
+    const slug = dishType.name.toLowerCase()
+      .replace(/æ/g, 'ae').replace(/ø/g, 'oe').replace(/å/g, 'aa')
+      .replace(/[^a-z0-9]+/g, '-');
+    const generatedUrl = creator === 'Valdemarsro' 
+      ? `https://www.valdemarsro.dk/${slug}/` 
+      : `https://www.arla.dk/opskrifter/${slug}/`;
+
     generated.push({
       id: `rec_${creator.toLowerCase()}_procedural_${startId + i}`,
       name: name,
       description: `En fantastisk ${mod.toLowerCase()} og budgetvenlig version af ${dishType.name.toLowerCase()} fra ${creator}. Perfekt til en travl hverdag, hvor der skal spares penge!`,
-      image: i % 2 === 0 
-        ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80' 
-        : 'https://images.unsplash.com/photo-1606890737304-57a1ca8a5b62?w=500&auto=format&fit=crop&q=80',
+      image: dishImage,
+      url: generatedUrl,
       prepTime: prep,
       servings: servings,
       tags: [creator, mod, dishType.tag],

@@ -2085,16 +2085,42 @@ export default function App() {
               <div className="modal-body">
                 {/* Brand badges & Recipe title row */}
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                    {selectedRecipe.tags.some(t => t.toLowerCase() === 'valdemarsro') && (
-                      <span className="source-badge valdemarsro-large">
-                        Valdemarsro opskrift
-                      </span>
-                    )}
-                    {selectedRecipe.tags.some(t => t.toLowerCase() === 'arla') && (
-                      <span className="source-badge arla-large">
-                        Arla opskrift
-                      </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {selectedRecipe.tags.some(t => t.toLowerCase() === 'valdemarsro') && (
+                        <span className="source-badge valdemarsro-large">
+                          Valdemarsro opskrift
+                        </span>
+                      )}
+                      {selectedRecipe.tags.some(t => t.toLowerCase() === 'arla') && (
+                        <span className="source-badge arla-large">
+                          Arla opskrift
+                        </span>
+                      )}
+                    </div>
+                    {selectedRecipe.url && (
+                      <a 
+                        href={selectedRecipe.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="modal-source-link-btn"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: 'var(--text-secondary)',
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          textDecoration: 'none',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <BookOpen size={12} /> Original opskrift
+                      </a>
                     )}
                   </div>
                   <div className="modal-recipe-title">{selectedRecipe.name}</div>
