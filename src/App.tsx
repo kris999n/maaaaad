@@ -120,6 +120,14 @@ const isIngredientMatchingDeal = (ingName: string, dealItem: string): boolean =>
 };
 
 export default function App() {
+  // Detect if running on mobile device or installed as PWA standalone
+  const shouldHideMockControls = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
+    return isMobile || isStandalone;
+  }, []);
+
   // App navigation
   const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
   
@@ -937,26 +945,28 @@ export default function App() {
   return (
     <div className="app-container">
       {/* Dynamic notch for desktop */}
-      <div className="app-notch"></div>
+      {!shouldHideMockControls && <div className="app-notch"></div>}
       
       {/* iOS Status Bar */}
-      <div className="app-status-bar">
-        <span className="time">16:24</span>
-        <div className="status-icons">
-          {isAutoScrapingActive ? (
-            <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '10px', animation: 'pulse 1s infinite alternate', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <span className="console-dot" style={{ width: '5px', height: '5px' }}></span> Auto-updater...
-            </span>
-          ) : (
-            <span style={{ color: 'var(--text-secondary)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="console-dot" style={{ width: '5px', height: '5px', backgroundColor: isAutoScraped ? 'var(--accent-green)' : '#999' }}></span> Scraper klar
-            </span>
-          )}
-          <Database size={13} style={{ opacity: 0.8 }} />
-          <span>5G</span>
-          <span style={{ fontSize: '11px', marginLeft: '2px' }}>100%</span>
+      {!shouldHideMockControls && (
+        <div className="app-status-bar">
+          <span className="time">16:24</span>
+          <div className="status-icons">
+            {isAutoScrapingActive ? (
+              <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '10px', animation: 'pulse 1s infinite alternate', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span className="console-dot" style={{ width: '5px', height: '5px' }}></span> Auto-updater...
+              </span>
+            ) : (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="console-dot" style={{ width: '5px', height: '5px', backgroundColor: isAutoScraped ? 'var(--accent-green)' : '#999' }}></span> Scraper klar
+              </span>
+            )}
+            <Database size={13} style={{ opacity: 0.8 }} />
+            <span>5G</span>
+            <span style={{ fontSize: '11px', marginLeft: '2px' }}>100%</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Screen Content */}
       <div className="app-screen">
@@ -2538,9 +2548,11 @@ export default function App() {
       </div>
 
       {/* iOS Home Indicator Bar */}
-      <div className="app-home-indicator">
-        <div className="bar"></div>
-      </div>
+      {!shouldHideMockControls && (
+        <div className="app-home-indicator">
+          <div className="bar"></div>
+        </div>
+      )}
 
       {/* Global minimal Toast Notification */}
       {toastMessage && (
