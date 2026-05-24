@@ -1071,6 +1071,11 @@ body {
   border: 1px solid rgba(0, 168, 89, 0.06);
 }
 
+.tip-card.general {
+  background-color: #FFF9E6;
+  border: 1px solid rgba(212, 175, 55, 0.15);
+}
+
 .tip-header {
   display: flex;
   align-items: center;
@@ -1086,6 +1091,10 @@ body {
 
 .tip-card.cheaper .tip-header {
   color: #008a47;
+}
+
+.tip-card.general .tip-header {
+  color: #BFA02C;
 }
 
 .tip-content {

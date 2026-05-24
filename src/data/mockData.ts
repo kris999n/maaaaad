@@ -36,6 +36,7 @@ export interface Recipe {
   tips?: {
     healthier: string;
     cheaper: string;
+    general?: string;
   };
 }
 

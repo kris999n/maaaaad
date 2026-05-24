@@ -186,6 +186,31 @@ async function scrapeValdemarsroRecipe(url) {
       instructions.push('Svits ingredienserne af i en dyb gryde.', 'Tilsæt de flydende ingredienser og lad retten simre.', 'Smag til med salt, peber og krydderier og server rygende varm.');
     }
 
+    // 5. Extract actual tip from Valdemarsro page if it exists
+    let generalTip = undefined;
+    const tipHeader = $('h2, h3').filter((idx, el) => {
+      const txt = $(el).text().toLowerCase();
+      return txt.includes('tip til') || txt === 'tip' || txt === 'tips';
+    }).first();
+    
+    if (tipHeader.length > 0) {
+      let sibling = tipHeader.next();
+      const tipTexts = [];
+      for (let j = 0; j < 3; j++) {
+        if (sibling.length > 0) {
+          const tagName = sibling[0].tagName.toLowerCase();
+          const txt = sibling.text().trim();
+          if (txt && (tagName === 'p' || tagName === 'ul' || tagName === 'ol')) {
+            tipTexts.push(txt);
+          }
+          sibling = sibling.next();
+        }
+      }
+      if (tipTexts.length > 0) {
+        generalTip = tipTexts.join('\n\n');
+      }
+    }
+
     // Generate tips dynamically
     const healthierTip = ingredients.some(ing => ing.name.toLowerCase().includes('fløde') || ing.name.toLowerCase().includes('smør'))
       ? 'Erstat piskefløde med madlavningsfløde 8% eller kokosmælk light for at spare på mættede fedtsyrer.'
@@ -218,7 +243,8 @@ async function scrapeValdemarsroRecipe(url) {
       kanFryses: kanFryses || 'Ja',
       tips: {
         healthier: healthierTip,
-        cheaper: cheaperTip
+        cheaper: cheaperTip,
+        general: generalTip
       },
       ingredients: ingredients,
       instructions: instructions
@@ -596,13 +622,62 @@ function generateProceduralRecipes(count, existingRecipes) {
   const startId = existingRecipes.length;
   
   const dishTypes = [
-    { name: 'Wok med kylling', tag: 'Kylling', main: 'Kyllingebrystfilet', basis: ['Løg', 'Hvidløg', 'Ris'] },
-    { name: 'Laksefilet med grønt', tag: 'Fisk', main: 'Frisk laksesteak', basis: ['Broccoli', 'Danske gulerødder', 'Økologiske citroner'] },
-    { name: 'Vegetarisk dahl', tag: 'Vegetarisk', main: 'Tørrede røde linser', basis: ['Kokosmælk økologisk', 'Frisk ingefær', 'Dåse hakkede tomater'] },
-    { name: 'Hakkebøf med kartofler', tag: 'Oksekød', main: 'Hakket oksekød', basis: ['Kartofler', 'Løg', 'Lurpak Smørbar'] },
-    { name: 'Cremet pastaret med bacon', tag: 'Pasta', main: 'Bacon', basis: ['Pasta', 'Champignon', 'Piskefløde'] },
-    { name: 'Frikadeller med stuvede porrer', tag: 'Klassisk', main: 'Hakket svinekød', basis: ['Friske æg', 'Økologisk letmælk', 'Friske porrer'] },
-    { name: 'Broccoli tærte', tag: 'Tærte', main: 'Friske æg', basis: ['Broccoli', 'Revet mozzarella', 'Surdejsboller'] }
+    { 
+      name: 'Wok med kylling', 
+      tag: 'Kylling', 
+      main: 'Kyllingebrystfilet', 
+      basis: ['Løg', 'Hvidløg', 'Ris'],
+      healthierTip: 'Erstat risene med blomkålsris og tilsæt rigeligt med sukkerærter og spidskål for ekstra sprødhed og vitaminer.',
+      cheaperTip: 'Kyllingebryst kan nemt erstattes af kyllingelårfilet (ofte billigere) eller frosne wokgrøntsager, som reducerer spild.'
+    },
+    { 
+      name: 'Laksefilet med grønt', 
+      tag: 'Fisk', 
+      main: 'Frisk laksesteak', 
+      basis: ['Broccoli', 'Danske gulerødder', 'Økologiske citroner'],
+      healthierTip: 'Damp grøntsagerne i stedet for at smørstege dem, og top laksen med dild og citron for smag uden ekstra kalorier.',
+      cheaperTip: 'Køb frossen laks i store partier, og brug årstidens billige rødder (fx pastinak eller gulerod) som tilbehør.'
+    },
+    { 
+      name: 'Vegetarisk dahl', 
+      tag: 'Vegetarisk', 
+      main: 'Tørrede røde linser', 
+      basis: ['Kokosmælk økologisk', 'Frisk ingefær', 'Dåse hakkede tomater'],
+      healthierTip: 'Bland friske spinatblade i retten lige inden servering, og server med en klat fedtfattig skyr 0,2%.',
+      cheaperTip: 'Dette er en ultra-billig ret! Brug tørrede linser i stedet for dåser, og lav en dobbelt portion til fryseren.'
+    },
+    { 
+      name: 'Hakkebøf med kartofler', 
+      tag: 'Oksekød', 
+      main: 'Hakket oksekød', 
+      basis: ['Kartofler', 'Løg', 'Lurpak Smørbar'],
+      healthierTip: 'Bland revet løg og gulerod direkte i hakkekødet for at strække kødet og øge grøntsagsindtaget.',
+      cheaperTip: 'Køb hakket oksekød med lavere fedtprocent når det er på tilbud, eller erstat Lurpak med en billigere smørbar.'
+    },
+    { 
+      name: 'Cremet pastaret med bacon', 
+      tag: 'Pasta', 
+      main: 'Bacon', 
+      basis: ['Pasta', 'Champignon', 'Piskefløde'],
+      healthierTip: 'Brug madlavningsfløde 8% frem for piskefløde, og tilføj masser af friske champignoner og ærter for at mætte mere.',
+      cheaperTip: 'Brug kalkunbacon eller bacontern på ugens tilbud. Du kan strække flødesovsen med lidt kogevand fra pastaen.'
+    },
+    { 
+      name: 'Frikadeller med stuvede porrer', 
+      tag: 'Klassisk', 
+      main: 'Hakket svinekød', 
+      basis: ['Friske æg', 'Økologisk letmælk', 'Friske porrer'],
+      healthierTip: 'Brug skummetmælk eller havremælk til farsen, og hav halvt svinekød, halvt revet hvidkål for en lettere frikadelle.',
+      cheaperTip: 'Svinekød er ofte på tilbud. Lav en stor portion og frys halvdelen ned – porrer kan købes meget billigt i bundter.'
+    },
+    { 
+      name: 'Broccoli tærte', 
+      tag: 'Tærte', 
+      main: 'Friske æg', 
+      basis: ['Broccoli', 'Revet mozzarella', 'Surdejsboller'],
+      healthierTip: 'Lav tærtebunden med halvt fuldkornshvedemel, og brug hytteost i æggemassen for ekstra protein og mindre fedt.',
+      cheaperTip: 'Broccoli kan bruges hel – også stokken, som bare skal skrælles og skæres i fine tern. Det minimerer madspild.'
+    }
   ];
 
   const modifiers = [
@@ -688,8 +763,8 @@ function generateProceduralRecipes(count, existingRecipes) {
       holdbarhed: '3 dage',
       kanFryses: i % 3 === 0 ? 'Nej' : 'Ja',
       tips: {
-        healthier: `Brug fuldkornsprodukter og tilsæt ekstra revne grøntsager som gulerødder og squash direkte i fadet.`,
-        cheaper: `Køb ${dishType.main.toLowerCase()} på tilbud i Netto eller Rema 1000 i denne uge for maksimal besparelse!`
+        healthier: dishType.healthierTip,
+        cheaper: dishType.cheaperTip
       },
       ingredients: ingredients,
       instructions: [

@@ -85,6 +85,40 @@ const scaleIngredientAmount = (amountStr: string, scaleFactor: number): string =
   });
 };
 
+// Strict matching helper to prevent false positive deal matches (e.g. "løg" matching "hvidløg")
+const isIngredientMatchingDeal = (ingName: string, dealItem: string): boolean => {
+  const ing = ingName.toLowerCase().trim();
+  const deal = dealItem.toLowerCase().trim();
+  
+  if (ing === deal) return true;
+  
+  // Specific exclusions and strict rules for short words to prevent false matching:
+  // e.g. "løg" should not match garlic ("hvidløg") or spring onions ("forårsløg")
+  if (ing === 'løg') {
+    return deal === 'løg' || deal === 'rødløg' || deal === 'skalotteløg' || deal.split(' ').includes('løg') || deal.startsWith('løg ');
+  }
+  if (ing === 'ris') {
+    return deal === 'ris' || deal === 'jasminris' || deal === 'basmatiris' || deal.split(' ').includes('ris') || deal.endsWith('ris');
+  }
+  if (ing === 'æg') {
+    return deal === 'æg' || (deal.includes('æg') && !deal.includes('bacon') && !deal.includes('gær'));
+  }
+  if (ing === 'smør') {
+    return deal.includes('smør') || deal.includes('smørbar');
+  }
+  if (ing === 'pasta') {
+    return deal.includes('pasta') || deal.includes('spaghetti') || deal.includes('skruer') || deal.includes('penne');
+  }
+  if (ing === 'bacon') {
+    return deal.includes('bacon');
+  }
+  if (ing === 'gulerødder') {
+    return deal.includes('gulerød') || deal.includes('gulerod') || deal.includes('gulerødder');
+  }
+  
+  return deal.includes(ing) || ing.includes(deal);
+};
+
 export default function App() {
   // App navigation
   const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
@@ -347,10 +381,7 @@ export default function App() {
     }
 
     const matchedDeals = matcherDeals.filter(d => 
-      activeStores.includes(d.store) && (
-        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
-        ingredientName.toLowerCase().includes(d.item.toLowerCase())
-      )
+      activeStores.includes(d.store) && isIngredientMatchingDeal(ingredientName, d.item)
     );
     
     if (matchedDeals.length > 0) {
@@ -389,10 +420,7 @@ export default function App() {
         if (isOwned) return; // Already owned! Cost is 0, so skip adding to totals!
 
         const matchedDeals = matcherDeals.filter(d => 
-          d.store === storeName && (
-            d.item.toLowerCase().includes(ing.name.toLowerCase()) || 
-            ing.name.toLowerCase().includes(d.item.toLowerCase())
-          )
+          d.store === storeName && isIngredientMatchingDeal(ing.name, d.item)
         );
         
         if (matchedDeals.length > 0) {
@@ -451,10 +479,7 @@ export default function App() {
     const targetStore = strategy === 'single' ? cheapestSingleStoreName : specificStoreName;
     
     const matchedDeals = matcherDeals.filter(d => 
-      d.store === targetStore && (
-        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
-        ingredientName.toLowerCase().includes(d.item.toLowerCase())
-      )
+      d.store === targetStore && isIngredientMatchingDeal(ingredientName, d.item)
     );
     
     if (matchedDeals.length > 0) {
@@ -2358,8 +2383,20 @@ export default function App() {
                 {/* maaaaad tips — Sundere & Billigere */}
                 {selectedRecipe.tips && (
                   <div className="maaaaad-tips-container" style={{ marginBottom: '24px' }}>
-                    <div className="modal-section-title" style={{ marginTop: '24px' }}>maaaaad tips — Sundere & Billigere</div>
+                    <div className="modal-section-title" style={{ marginTop: '24px' }}>Tips & Gode Råd</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {selectedRecipe.tips.general && (
+                        <div className="tip-card general">
+                          <div className="tip-header">
+                            <Info size={14} className="tip-icon" />
+                            <span>TIP FRA KILDEN</span>
+                          </div>
+                          <div className="tip-content" style={{ whiteSpace: 'pre-line' }}>
+                            {selectedRecipe.tips.general}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="tip-card healthier">
                         <div className="tip-header">
                           <Sparkles size={14} className="tip-icon" />

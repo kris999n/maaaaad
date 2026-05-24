@@ -87,6 +87,22 @@ async function testValdemarsro() {
     // The description is usually the first paragraph or meta description
     console.log('Meta Description:', $('meta[name="description"]').attr('content'));
     console.log('First p text:', $('p').first().text().trim().substring(0, 200) + '...');
+
+    console.log('--- Search for tips on the page ---');
+    $('h1, h2, h3, h4, h5').each((i, el) => {
+      const text = $(el).text().trim();
+      const tagName = el.tagName.toLowerCase();
+      if (text.toLowerCase().includes('tip')) {
+        console.log(`FOUND HEADER [${tagName}]: "${text}"`);
+        let sibling = $(el).next();
+        for (let j = 0; j < 5; j++) {
+          if (sibling.length > 0) {
+            console.log(`  Sibling [${sibling[0].tagName.toLowerCase()}]: "${sibling.text().trim().substring(0, 300)}"`);
+            sibling = sibling.next();
+          }
+        }
+      }
+    });
   } catch (err) {
     console.error('Error fetching Valdemarsro:', err.message);
     if (err.response) {
@@ -167,4 +183,4 @@ async function testArla() {
   }
 }
 
-testArla();
+testValdemarsro();
