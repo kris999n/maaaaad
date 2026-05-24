@@ -50,7 +50,7 @@ interface LogMessage {
 }
 
 export default function App() {
-  // App navigation (Phase 2: replaced 'scraper' with 'settings')
+  // App navigation
   const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
   
   // Database States (updated by Scraper)
@@ -60,15 +60,15 @@ export default function App() {
   // Interactive Shopping List
   const [shoppingList, setShoppingList] = useState<ShoppingCartItem[]>([]);
   
-  // Phase 2: Store selection filter (User's stores)
+  // Store selection filter (User's stores)
   const [activeStores, setActiveStores] = useState<string[]>(SUPERMARKETS.map(s => s.name));
   
-  // Phase 2: Auto-scraping settings
+  // Auto-scraping settings
   const [autoScrape, setAutoScrape] = useState<boolean>(true);
   const [isAutoScraped, setIsAutoScraped] = useState<boolean>(false);
   const [isAutoScrapingActive, setIsAutoScrapingActive] = useState<boolean>(false);
   
-  // Phase 2: Custom shopping item inputs
+  // Custom shopping item inputs
   const [customItemName, setCustomItemName] = useState('');
   const [customItemStore, setCustomItemStore] = useState('Fælles indkøb');
   const [suggestedDeal, setSuggestedDeal] = useState<Deal | null>(null);
@@ -79,6 +79,10 @@ export default function App() {
   const [selectedStore, setSelectedStore] = useState('Alle');
   const [selectedCategory, setSelectedCategory] = useState('Alle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Phase 3: Recipe details strategy settings (Mix stores, Single cheapest, or Specific store)
+  const [modalStrategy, setModalStrategy] = useState<'mix' | 'single' | 'specific'>('mix');
+  const [modalSpecificStore, setModalSpecificStore] = useState<string>('Rema 1000');
   
   // Scraper Accordion State in Settings
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
@@ -101,10 +105,16 @@ export default function App() {
     }
   }, [scraperLogs]);
 
-  // Phase 2: Simulated background auto-scraping on app launch
+  // Synchronize modalSpecificStore if current store is deactivated in Settings
+  useEffect(() => {
+    if (activeStores.length > 0 && !activeStores.includes(modalSpecificStore)) {
+      setModalSpecificStore(activeStores[0]);
+    }
+  }, [activeStores, modalSpecificStore]);
+
+  // Simulated background auto-scraping on app launch
   useEffect(() => {
     if (autoScrape && !isAutoScraped) {
-      // Set indicator that auto-scraping is in progress
       setIsAutoScrapingActive(true);
       
       const timer = setTimeout(() => {
@@ -130,17 +140,15 @@ export default function App() {
     }
   }, [autoScrape, isAutoScraped]);
 
-  // Phase 2: Search for matches on sale as the user types custom shopping list items
+  // Search for matches on sale as the user types custom shopping list items
   useEffect(() => {
     const query = customItemName.trim().toLowerCase();
     if (query.length > 1) {
-      // Find matching deal from the user's ACTIVE stores
       const matches = deals.filter(d => 
         activeStores.includes(d.store) && 
         (d.item.toLowerCase().includes(query) || query.includes(d.item.toLowerCase()))
       );
       if (matches.length > 0) {
-        // Recommend the best deal (cheapest first)
         const best = [...matches].sort((a, b) => a.price - b.price)[0];
         setSuggestedDeal(best);
       } else {
@@ -157,7 +165,7 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Phase 2: Toggle supermarket setting checkbox
+  // Toggle supermarket setting checkbox
   const toggleStoreSetting = (storeName: string) => {
     setActiveStores(prev => {
       if (prev.includes(storeName)) {
@@ -174,31 +182,8 @@ export default function App() {
     });
   };
 
-  // Helper matching engine to find best deals or normal price fallbacks for ingredients
-  // Phase 2: Matched deals are strictly filtered by activeStores chosen in Settings!
-  const getIngredientPriceInfo = (ingredientName: string) => {
-    const matchedDeals = deals.filter(d => 
-      activeStores.includes(d.store) && (
-        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
-        ingredientName.toLowerCase().includes(d.item.toLowerCase())
-      )
-    );
-    
-    if (matchedDeals.length > 0) {
-      // Find the absolute cheapest deal among the matches
-      const bestDeal = [...matchedDeals].sort((a, b) => a.price - b.price)[0];
-      return {
-        onSale: true,
-        price: bestDeal.price,
-        normalPrice: bestDeal.normalPrice,
-        saving: bestDeal.saving,
-        store: bestDeal.store,
-        displayName: bestDeal.item,
-        unit: bestDeal.unit
-      };
-    }
-    
-    // Normal fallback prices for common foods when they are not on sale
+  // Normal fallback prices for common foods when they are not on sale (Pantry fallbacks)
+  const getIngredientNormalPriceInfo = (ingredientName: string) => {
     const fallbackNormalPrices: Record<string, { price: number, unit: string }> = {
       'lasagneplader': { price: 12, unit: '500g' },
       'letmælk': { price: 12, unit: '1 liter' },
@@ -247,17 +232,133 @@ export default function App() {
     };
   };
 
-  // Compile recipe pricing stats
-  const calculateRecipeStats = (recipe: Recipe) => {
+  // Helper matching engine to find best deals or normal price fallbacks for ingredients
+  // Matched deals are strictly filtered by activeStores chosen in Settings!
+  const getIngredientPriceInfo = (ingredientName: string) => {
+    const matchedDeals = deals.filter(d => 
+      activeStores.includes(d.store) && (
+        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
+        ingredientName.toLowerCase().includes(d.item.toLowerCase())
+      )
+    );
+    
+    if (matchedDeals.length > 0) {
+      const bestDeal = [...matchedDeals].sort((a, b) => a.price - b.price)[0];
+      return {
+        onSale: true,
+        price: bestDeal.price,
+        normalPrice: bestDeal.normalPrice,
+        saving: bestDeal.saving,
+        store: bestDeal.store,
+        displayName: bestDeal.item,
+        unit: bestDeal.unit
+      };
+    }
+    
+    return getIngredientNormalPriceInfo(ingredientName);
+  };
+
+  // Phase 3 helper: Evaluate cheapest single supermarket for all recipe ingredients
+  const findCheapestSingleStore = (recipe: Recipe) => {
+    if (activeStores.length === 0) return { store: 'Fælles indkøb', price: 0, normalPrice: 0, saving: 0 };
+    
+    const storeTotals = activeStores.map(storeName => {
+      let totalPrice = 0;
+      let totalNormalPrice = 0;
+      
+      recipe.ingredients.forEach(ing => {
+        if (ing.isBasis) return;
+        
+        const matchedDeals = deals.filter(d => 
+          d.store === storeName && (
+            d.item.toLowerCase().includes(ing.name.toLowerCase()) || 
+            ing.name.toLowerCase().includes(d.item.toLowerCase())
+          )
+        );
+        
+        if (matchedDeals.length > 0) {
+          const bestDeal = [...matchedDeals].sort((a, b) => a.price - b.price)[0];
+          totalPrice += bestDeal.price;
+          totalNormalPrice += bestDeal.normalPrice;
+        } else {
+          const normalInfo = getIngredientNormalPriceInfo(ing.name);
+          totalPrice += normalInfo.price;
+          totalNormalPrice += normalInfo.price;
+        }
+      });
+      
+      return {
+        store: storeName,
+        price: totalPrice,
+        normalPrice: totalNormalPrice,
+        saving: totalNormalPrice - totalPrice
+      };
+    });
+    
+    const sortedStores = [...storeTotals].sort((a, b) => a.price - b.price);
+    return sortedStores[0];
+  };
+
+  // Phase 3 helper: Get ingredient pricing based on chosen recipe shopping strategy
+  const getIngredientPriceInfoWithStrategy = (
+    ingredientName: string, 
+    strategy: 'mix' | 'single' | 'specific',
+    specificStoreName: string,
+    cheapestSingleStoreName: string
+  ) => {
+    if (strategy === 'mix') {
+      return getIngredientPriceInfo(ingredientName);
+    }
+    
+    const targetStore = strategy === 'single' ? cheapestSingleStoreName : specificStoreName;
+    
+    const matchedDeals = deals.filter(d => 
+      d.store === targetStore && (
+        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
+        ingredientName.toLowerCase().includes(d.item.toLowerCase())
+      )
+    );
+    
+    if (matchedDeals.length > 0) {
+      const bestDeal = [...matchedDeals].sort((a, b) => a.price - b.price)[0];
+      return {
+        onSale: true,
+        price: bestDeal.price,
+        normalPrice: bestDeal.normalPrice,
+        saving: bestDeal.saving,
+        store: bestDeal.store,
+        displayName: bestDeal.item,
+        unit: bestDeal.unit
+      };
+    }
+    
+    return getIngredientNormalPriceInfo(ingredientName);
+  };
+
+  // Compile recipe pricing stats with respect to strategy (Phase 3 feature)
+  const calculateRecipeStatsWithStrategy = (
+    recipe: Recipe, 
+    strategy: 'mix' | 'single' | 'specific',
+    specificStoreName: string
+  ) => {
+    const cheapestSingle = findCheapestSingleStore(recipe);
+    
     let totalPrice = 0;
     let totalNormalPrice = 0;
     let matchedCount = 0;
     let matchableCount = 0;
 
     recipe.ingredients.forEach(ing => {
-      if (ing.isBasis) return; // Skip pantry staples like salt
+      if (ing.isBasis) return;
       matchableCount++;
-      const priceInfo = getIngredientPriceInfo(ing.name);
+      
+      const priceInfo = getIngredientPriceInfoWithStrategy(
+        ing.name, 
+        strategy, 
+        specificStoreName, 
+        cheapestSingle.store
+      );
+      
       totalPrice += priceInfo.price;
       totalNormalPrice += priceInfo.normalPrice;
       if (priceInfo.onSale) {
@@ -274,8 +375,16 @@ export default function App() {
       saving,
       matchScore,
       matchedCount,
-      matchableCount
+      matchableCount,
+      cheapestStoreName: cheapestSingle.store,
+      cheapestStorePrice: cheapestSingle.price,
+      cheapestStoreSaving: cheapestSingle.saving
     };
+  };
+
+  // Calculate default recipe stats for list views (always uses mix strategy)
+  const calculateRecipeStats = (recipe: Recipe) => {
+    return calculateRecipeStatsWithStrategy(recipe, 'mix', 'Rema 1000');
   };
 
   // Add individual deal to shopping list
@@ -303,7 +412,7 @@ export default function App() {
     showToast(`Tilføjet ${deal.item} (${deal.store}) til indkøbslisten!`);
   };
 
-  // Add custom typed item to shopping list (Phase 2 feature)
+  // Add custom typed item to shopping list
   const handleAddCustomItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customItemName.trim()) return;
@@ -312,10 +421,10 @@ export default function App() {
       id: `custom-${Date.now()}`,
       name: customItemName.trim(),
       displayName: customItemName.trim(),
-      price: 0, // Manual items have 0 kr since no price is known
+      price: 0,
       normalPrice: 0,
       saving: 0,
-      store: customItemStore === 'Fælles indkøb' ? 'Fælles indkøb' : customItemStore,
+      store: customItemStore,
       unit: 'stk',
       checked: false
     };
@@ -326,7 +435,7 @@ export default function App() {
     setSuggestedDeal(null);
   };
 
-  // Add the recommended deal instead of the typed custom text (Phase 2 smart helper)
+  // Add recommended deal
   const addSuggestedDealDirectly = () => {
     if (!suggestedDeal) return;
     addDealToShoppingList(suggestedDeal);
@@ -334,15 +443,26 @@ export default function App() {
     setSuggestedDeal(null);
   };
 
-  // Add recipe ingredients to shopping list
-  const addRecipeToShoppingList = (recipe: Recipe) => {
+  // Add recipe ingredients to shopping list respecting selected strategy (Phase 3 feature)
+  const addRecipeToShoppingListWithStrategy = (
+    recipe: Recipe,
+    strategy: 'mix' | 'single' | 'specific',
+    specificStoreName: string
+  ) => {
+    const cheapestSingle = findCheapestSingleStore(recipe);
     let addedCount = 0;
     const newItems: ShoppingCartItem[] = [];
 
     recipe.ingredients.forEach(ing => {
-      if (ing.isBasis) return; // Ignore basis items like salt, pepper, garlic
+      if (ing.isBasis) return;
       
-      const priceInfo = getIngredientPriceInfo(ing.name);
+      const priceInfo = getIngredientPriceInfoWithStrategy(
+        ing.name, 
+        strategy, 
+        specificStoreName, 
+        cheapestSingle.store
+      );
+      
       const itemKey = `${recipe.id}-${ing.name}-${priceInfo.store}`;
       const exists = shoppingList.some(item => item.id === itemKey);
       
@@ -425,19 +545,19 @@ export default function App() {
     }, 3000);
 
     setTimeout(() => {
-      appendLog('[NETTO] & [COOP 365] Scraper ugentlige discounttilbud...', 'info');
+      appendLog('[NETTO] ^& [COOP 365] Scraper ugentlige discounttilbud...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Netto': 85, 'Coop 365': 70 }));
     }, 3600);
 
     setTimeout(() => {
       appendLog('[NETTO] Fandt fantastisk tilbud på bacon (Spar 50%) og smør!', 'success');
-      appendLog('[LIDL] & [FØTEX] Behandler fisk- og grønttilbud...', 'info');
+      appendLog('[LIDL] ^& [FØTEX] Behandler fisk- og grønttilbud...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Netto': 100, 'Coop 365': 100, 'Lidl': 100, 'Føtex': 80 }));
     }, 4400);
 
     setTimeout(() => {
       appendLog('[FØTEX] Behandlet 620 tilbud. Database synkroniseret.', 'success');
-      appendLog('[OPSKRIFTER] Scanner Valdemarsro & Madbanditten for nye madplaner...', 'info');
+      appendLog('[OPSKRIFTER] Scanner Valdemarsro ^& Madbanditten for nye madplaner...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Føtex': 100, 'Opskrifter': 50 }));
     }, 5200);
 
@@ -447,7 +567,6 @@ export default function App() {
     }, 5800);
 
     setTimeout(() => {
-      // Injection of new mock data after scrape finishes
       setDeals(prev => {
         const originalDeals = prev.filter(d => !d.id.startsWith('sc_'));
         return [...originalDeals, ...SCRAPED_DEALS_POOL];
@@ -461,7 +580,7 @@ export default function App() {
       appendLog('[DATABASE] Succes! Indlæst 10 nye ugentlige megakup og 2 nye opskrifter.', 'success');
       appendLog('Scraping færdig. Alle opskrifter har fået opdateret deres Match Score!', 'success');
       setScraperStatus('completed');
-      setIsAutoScraped(true); // Don't run auto-scrape if they ran manually
+      setIsAutoScraped(true);
       showToast('Scraper færdig! Nye tilbud og opskrifter indlæst.');
     }, 6500);
   };
@@ -487,7 +606,6 @@ export default function App() {
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = deal.item.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           deal.category.toLowerCase().includes(searchQuery.toLowerCase());
-    // Must be in activeStores chosen in Settings!
     const isStoreActive = activeStores.includes(deal.store);
     const matchesStore = selectedStore === 'Alle' ? isStoreActive : (deal.store === selectedStore && isStoreActive);
     const matchesCategory = selectedCategory === 'Alle' || deal.category === selectedCategory;
@@ -509,7 +627,6 @@ export default function App() {
       <div className="app-status-bar">
         <span className="time">16:24</span>
         <div className="status-icons">
-          {isAutoScrubbing()}
           {isAutoScrapingActive ? (
             <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '10px', animation: 'pulse 1s infinite alternate', display: 'flex', alignItems: 'center', gap: '3px' }}>
               <span className="console-dot" style={{ width: '5px', height: '5px' }}></span> Auto-updater...
@@ -552,7 +669,6 @@ export default function App() {
 
             <div className="home-summary-stats">
               <div className="stat-box">
-                {/* Count active deals from checked stores only */}
                 <div className="number">
                   {deals.filter(d => activeStores.includes(d.store)).length}
                 </div>
@@ -652,7 +768,7 @@ export default function App() {
               {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-tertiary)' }} />}
             </div>
 
-            {/* Store selection slider (shows only checked stores!) */}
+            {/* Store selection slider */}
             <div className="horizontal-selector">
               <div 
                 className={`selector-pill ${selectedStore === 'Alle' ? 'active' : ''}`}
@@ -827,7 +943,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Smart input bar at the top of shopping list (Phase 2 feature) */}
+            {/* Smart input bar */}
             <div className="shopping-input-container">
               <form onSubmit={handleAddCustomItem} className="shopping-input-row">
                 <input 
@@ -850,16 +966,16 @@ export default function App() {
                 </button>
               </form>
 
-              {/* Dynamic suggestion card if typed item matches an active deal in active stores */}
+              {/* Dynamic suggestion card */}
               {suggestedDeal && (
                 <div className="suggestion-chip" onClick={addSuggestedDealDirectly}>
                   <div className="suggestion-chip-left">
-                    <Sparkles size={13} />
+                    <Sparkles size={13} style={{ flexShrink: 0 }} />
                     <span>
                       Ugens kup: <b>{suggestedDeal.item}</b> i <b>{suggestedDeal.store}</b> til kun <b>{suggestedDeal.price} kr.</b> (Spar {suggestedDeal.saving} kr.!)
                     </span>
                   </div>
-                  <span style={{ fontSize: '10px', textDecoration: 'underline', fontWeight: 700 }}>Tilføj</span>
+                  <span style={{ fontSize: '10px', textDecoration: 'underline', fontWeight: 700, flexShrink: 0, marginLeft: '6px' }}>Tilføj</span>
                 </div>
               )}
             </div>
@@ -956,7 +1072,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 5: SETTINGS & CONTROLS (Phase 2 tab) */}
+        {/* TAB 5: SETTINGS & CONTROLS */}
         {activeTab === 'settings' && (
           <div className="page-fade-active" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="header-container">
@@ -1124,9 +1240,10 @@ export default function App() {
 
       </div>
 
-      {/* RECIPE DETAILS MODAL (BOTTOM SLIDING SHEET) */}
+      {/* RECIPE DETAILS MODAL (BOTTOM SLIDING SHEET WITH DYNAMIC SHOPPING STRATEGIES) */}
       {selectedRecipe && (() => {
-        const stats = calculateRecipeStats(selectedRecipe);
+        // Calculate dynamic stats for this recipe based on user's current MODAL Strategy!
+        const stats = calculateRecipeStatsWithStrategy(selectedRecipe, modalStrategy, modalSpecificStore);
         return (
           <div className="modal-overlay" onClick={() => setSelectedRecipe(null)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1141,7 +1258,7 @@ export default function App() {
                 <div className="modal-recipe-title">{selectedRecipe.name}</div>
                 <div className="modal-recipe-desc">{selectedRecipe.description}</div>
                 
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
                   <div className="recipe-stat-item" style={{ fontSize: '13px' }}>
                     <Clock size={16} />
                     <span><b>{selectedRecipe.prepTime}</b> minutter</span>
@@ -1152,8 +1269,76 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Phase 3 Segmented Control for Strategy Selection */}
+                <div className="modal-section-title" style={{ borderBottom: 'none', marginBottom: '8px' }}>
+                  Beregning ^& Indkøb Strategy
+                </div>
+                <div className="strategy-selector">
+                  <button 
+                    className={`strategy-pill ${modalStrategy === 'mix' ? 'active' : ''}`}
+                    onClick={() => setModalStrategy('mix')}
+                  >
+                    Bland butikker
+                  </button>
+                  <button 
+                    className={`strategy-pill ${modalStrategy === 'single' ? 'active' : ''}`}
+                    onClick={() => setModalStrategy('single')}
+                  >
+                    Enkeltbutik
+                  </button>
+                  <button 
+                    className={`strategy-pill ${modalStrategy === 'specific' ? 'active' : ''}`}
+                    onClick={() => setModalStrategy('specific')}
+                  >
+                    Vælg butik...
+                  </button>
+                </div>
+
+                {/* Supermarket selector slider if 'specific' store is chosen */}
+                {modalStrategy === 'specific' && (
+                  <div className="modal-store-selector">
+                    {SUPERMARKETS.filter(s => activeStores.includes(s.name)).map(store => (
+                      <button
+                        key={store.name}
+                        className={`modal-store-pill ${modalSpecificStore === store.name ? 'active' : ''}`}
+                        onClick={() => setModalSpecificStore(store.name)}
+                      >
+                        {store.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Dynamic Strategy Info Advice Card */}
+                {modalStrategy === 'mix' && (
+                  <div className="strategy-info-box">
+                    <Info size={16} style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '11px' }}>
+                      Blander ugesedler fra <span className="highlight">alle aktive butikker</span> for at opnå den absolut maksimale besparelse.
+                    </div>
+                  </div>
+                )}
+
+                {modalStrategy === 'single' && (
+                  <div className="strategy-info-box">
+                    <Info size={16} style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '11px' }}>
+                      Køb alt samlet ét sted. <span className="highlight">{stats.cheapestStoreName}</span> gør hele retten billigst samlet til <span className="highlight">{stats.cheapestStorePrice} kr.</span> (Spar {stats.cheapestStoreSaving} kr.!).
+                    </div>
+                  </div>
+                )}
+
+                {modalStrategy === 'specific' && (
+                  <div className="strategy-info-box">
+                    <Info size={16} style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '11px' }}>
+                      Evaluerer kun tilbud fra <span className="highlight">{modalSpecificStore}</span>. Alt andet købes i butikken til normal basispris.
+                    </div>
+                  </div>
+                )}
+
                 <div className="modal-section-title">
-                  Ingredienser matchet mod mine butikker
+                  Ingredienser i denne uge ({stats.totalPrice} kr.)
                 </div>
 
                 <div className="modal-ingredients-list">
@@ -1169,7 +1354,13 @@ export default function App() {
                       );
                     }
 
-                    const priceInfo = getIngredientPriceInfo(ing.name);
+                    // Retrieve pricing for this ingredient respecting current strategy!
+                    const priceInfo = getIngredientPriceInfoWithStrategy(
+                      ing.name, 
+                      modalStrategy, 
+                      modalSpecificStore, 
+                      stats.cheapestStoreName
+                    );
                     const storeStyle = SUPERMARKETS.find(s => s.name === priceInfo.store);
 
                     return (
@@ -1230,7 +1421,8 @@ export default function App() {
                 <button 
                   className="btn-primary secondary-style"
                   onClick={() => {
-                    addRecipeToShoppingList(selectedRecipe);
+                    // Phase 3: Add to shopping list dynamically respecting selected strategy!
+                    addRecipeToShoppingListWithStrategy(selectedRecipe, modalStrategy, modalSpecificStore);
                     setSelectedRecipe(null);
                   }}
                 >
@@ -1338,9 +1530,4 @@ export default function App() {
       )}
     </div>
   );
-
-  // Lydloes scrapings indikation i statusbar
-  function isAutoScrubbing() {
-    return null;
-  }
 }
