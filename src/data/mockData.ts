@@ -8,6 +8,8 @@ export interface Deal {
   category: string;
   unit: string;
   imageUrl?: string;
+  isMemberDeal?: boolean;
+  memberType?: string;
 }
 
 export interface RecipeIngredient {
@@ -164,7 +166,9 @@ export const INITIAL_DEALS: Deal[] = [
     store: 'Lidl',
     category: 'Kød & Fisk',
     unit: '250g',
-    imageUrl: 'https://images.unsplash.com/photo-1485921325814-a5341f6118d8?w=300&auto=format&fit=crop&q=60'
+    imageUrl: 'https://images.unsplash.com/photo-1485921325814-a5341f6118d8?w=300&auto=format&fit=crop&q=60',
+    isMemberDeal: true,
+    memberType: 'Lidl Plus'
   },
   {
     id: 'l2',
@@ -199,7 +203,9 @@ export const INITIAL_DEALS: Deal[] = [
     store: 'Coop 365',
     category: 'Mejeri & Æg',
     unit: '1 liter',
-    imageUrl: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&auto=format&fit=crop&q=60'
+    imageUrl: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&auto=format&fit=crop&q=60',
+    isMemberDeal: true,
+    memberType: 'Coop Medlem'
   },
   {
     id: 'c2',

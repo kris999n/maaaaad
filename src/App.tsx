@@ -17,7 +17,10 @@ import {
   Database,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  List,
+  Grid,
+  Layout
 } from 'lucide-react';
 import type { Deal, Recipe } from './data/mockData';
 import { 
@@ -85,6 +88,11 @@ export default function App() {
   const [modalStrategy, setModalStrategy] = useState<'mix' | 'single' | 'specific'>('mix');
   const [modalSpecificStore, setModalSpecificStore] = useState<string>('Rema 1000');
   
+  // Phase 4: Layout and Member settings states
+  const [includeMemberDeals, setIncludeMemberDeals] = useState<boolean>(true);
+  const [dealsViewMode, setDealsViewMode] = useState<'list' | 'small' | 'large'>('list');
+  const [recipesViewMode, setRecipesViewMode] = useState<'list' | 'small' | 'large'>('large');
+  
   // Scraper Accordion State in Settings
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
   
@@ -96,6 +104,9 @@ export default function App() {
   const [scraperProgress, setScraperProgress] = useState<Record<string, number>>({
     'Meny': 0, 'Rema 1000': 0, 'Netto': 0, 'Lidl': 0, 'Coop 365': 0, 'Føtex': 0, 'Opskrifter': 0
   });
+
+  // Filtered deals pool for matching engine (excludes member deals if includeMemberDeals is false)
+  const matcherDeals = includeMemberDeals ? deals : deals.filter(d => !d.isMemberDeal);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -145,7 +156,7 @@ export default function App() {
   useEffect(() => {
     const query = customItemName.trim().toLowerCase();
     if (query.length > 1) {
-      const matches = deals.filter(d => 
+      const matches = matcherDeals.filter(d => 
         activeStores.includes(d.store) && 
         (d.item.toLowerCase().includes(query) || query.includes(d.item.toLowerCase()))
       );
@@ -158,7 +169,7 @@ export default function App() {
     } else {
       setSuggestedDeal(null);
     }
-  }, [customItemName, deals, activeStores]);
+  }, [customItemName, matcherDeals, activeStores]);
 
   // Toast Helper
   const showToast = (msg: string) => {
@@ -236,7 +247,7 @@ export default function App() {
   // Helper matching engine to find best deals or normal price fallbacks for ingredients
   // Matched deals are strictly filtered by activeStores chosen in Settings!
   const getIngredientPriceInfo = (ingredientName: string) => {
-    const matchedDeals = deals.filter(d => 
+    const matchedDeals = matcherDeals.filter(d => 
       activeStores.includes(d.store) && (
         d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
         ingredientName.toLowerCase().includes(d.item.toLowerCase())
@@ -270,7 +281,7 @@ export default function App() {
       recipe.ingredients.forEach(ing => {
         if (ing.isBasis) return;
         
-        const matchedDeals = deals.filter(d => 
+        const matchedDeals = matcherDeals.filter(d => 
           d.store === storeName && (
             d.item.toLowerCase().includes(ing.name.toLowerCase()) || 
             ing.name.toLowerCase().includes(d.item.toLowerCase())
@@ -313,7 +324,7 @@ export default function App() {
     
     const targetStore = strategy === 'single' ? cheapestSingleStoreName : specificStoreName;
     
-    const matchedDeals = deals.filter(d => 
+    const matchedDeals = matcherDeals.filter(d => 
       d.store === targetStore && (
         d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
         ingredientName.toLowerCase().includes(d.item.toLowerCase())
@@ -802,11 +813,39 @@ export default function App() {
               ))}
             </div>
 
-            <div className="section-title">
+            <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{filteredDeals.length} tilbud fundet</span>
+              
+              {/* Segmented View Switcher */}
+              <div className="view-switcher">
+                <button 
+                  className={`view-btn ${dealsViewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setDealsViewMode('list')}
+                  title="Liste"
+                >
+                  <List size={13} />
+                  <span>Liste</span>
+                </button>
+                <button 
+                  className={`view-btn ${dealsViewMode === 'small' ? 'active' : ''}`}
+                  onClick={() => setDealsViewMode('small')}
+                  title="Fliser"
+                >
+                  <Grid size={13} />
+                  <span>Fliser</span>
+                </button>
+                <button 
+                  className={`view-btn ${dealsViewMode === 'large' ? 'active' : ''}`}
+                  onClick={() => setDealsViewMode('large')}
+                  title="Kort"
+                >
+                  <Layout size={13} />
+                  <span>Kort</span>
+                </button>
+              </div>
             </div>
 
-            <div className="deals-grid" style={{ flex: 1, overflowY: 'auto' }}>
+            <div className={`deals-grid view-${dealsViewMode}`} style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDeals.length > 0 ? (
                 filteredDeals.map(deal => {
                   const isAdded = shoppingList.some(item => item.id === deal.id);
@@ -823,6 +862,11 @@ export default function App() {
                           }}>
                             {deal.store}
                           </span>
+                          {deal.isMemberDeal && deal.memberType && (
+                            <span className={`member-badge badge-member-${deal.store.toLowerCase().replace(' ', '-')}`}>
+                              {deal.memberType}
+                            </span>
+                          )}
                           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{deal.unit}</span>
                         </div>
                       </div>
@@ -863,7 +907,39 @@ export default function App() {
               </p>
             </div>
 
-            <div className="recipes-grid">
+            <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 12px 0' }}>
+              <span>{sortedRecipes.length} retter foreslået</span>
+              
+              {/* Segmented View Switcher */}
+              <div className="view-switcher">
+                <button 
+                  className={`view-btn ${recipesViewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setRecipesViewMode('list')}
+                  title="Liste"
+                >
+                  <List size={13} />
+                  <span>Liste</span>
+                </button>
+                <button 
+                  className={`view-btn ${recipesViewMode === 'small' ? 'active' : ''}`}
+                  onClick={() => setRecipesViewMode('small')}
+                  title="Fliser"
+                >
+                  <Grid size={13} />
+                  <span>Fliser</span>
+                </button>
+                <button 
+                  className={`view-btn ${recipesViewMode === 'large' ? 'active' : ''}`}
+                  onClick={() => setRecipesViewMode('large')}
+                  title="Kort"
+                >
+                  <Layout size={13} />
+                  <span>Kort</span>
+                </button>
+              </div>
+            </div>
+
+            <div className={`recipes-grid view-${recipesViewMode}`}>
               {sortedRecipes.map(recipe => {
                 let badgeClass = 'badge-gray';
                 let scoreText = 'Ingen kup';
@@ -1119,7 +1195,32 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Group 2: Scraping Configuration */}
+              {/* Group 2: Pricing & Matching Configuration */}
+              <div className="settings-group">
+                <h3>Pris- & matchindstillinger</h3>
+                <div className="settings-list">
+                  <div className="settings-row" onClick={() => setIncludeMemberDeals(!includeMemberDeals)}>
+                    <div className="settings-row-label">
+                      <div>
+                        <div>Inkluder medlemstilbud</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: 400 }}>
+                          Brug priser fra Lidl Plus, Coop Medlem, Meny Kundeklub og Salling Plus i madplaner
+                        </div>
+                      </div>
+                    </div>
+                    <label className="switch" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={includeMemberDeals}
+                        onChange={() => setIncludeMemberDeals(!includeMemberDeals)}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Scraping Configuration */}
               <div className="settings-group">
                 <h3>Automatiseret scraping</h3>
                 <div className="settings-list">
@@ -1144,7 +1245,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Group 3: Collapsible Manual Scraper Accordion */}
+              {/* Group 4: Collapsible Manual Scraper Accordion */}
               <div className="settings-group">
                 <h3>Avancerede værktøjer</h3>
                 
