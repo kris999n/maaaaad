@@ -29,6 +29,11 @@ export interface Recipe {
   ingredients: RecipeIngredient[];
   instructions: string[];
   tags: string[];
+  healthScore?: number;
+  tips?: {
+    healthier: string;
+    cheaper: string;
+  };
 }
 
 export const SUPERMARKETS = [
@@ -276,6 +281,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 45,
     servings: 4,
     tags: ['Familievenlig', 'Populær', 'Pasta'],
+    healthScore: 5,
+    tips: {
+      healthier: 'Riv 2 gulerødder og 1 porre fint og svits dem med i kødsovsen. Det booster fiberindholdet og tæller som +2 på sundhedsskalaen!',
+      cheaper: 'Erstat halvdelen eller hele mængden af hakket oksekød med tørrede røde linser. Det sparer dig for ca. 25 kr. og smager fantastisk.'
+    },
     ingredients: [
       { name: 'Hakket oksekød', displayName: 'Hakket oksekød 8-12%', amount: '400g' },
       { name: 'Dåse hakkede tomater', displayName: 'Hakkede tomater', amount: '1 dåse (400g)' },
@@ -303,6 +313,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 20,
     servings: 2,
     tags: ['Hurtig', 'Italiensk', 'Mindre end 30 min'],
+    healthScore: 3,
+    tips: {
+      healthier: 'Brug fuldkornspasta i stedet for hvid spaghetti. Det giver langsommere kulhydrater, en bedre mæthedsfornemmelse og flere kostfibre.',
+      cheaper: 'Køb bacon i skiver frem for færdige tern – ugesedlerne har næsten altid 100g eller 120g pakker til helt ned til 7-9 kr. i Netto.'
+    },
     ingredients: [
       { name: 'Pasta', displayName: 'Spaghetti n. 5', amount: '250g' },
       { name: 'Bacon', displayName: 'Sprød bacon i skiver/tern', amount: '150g' },
@@ -313,8 +328,8 @@ export const INITIAL_RECIPES: Recipe[] = [
     ],
     instructions: [
       'Kog spaghettien al dente i rigeligt saltet vand efter pakkens anvisning.',
-      'Steg baconen sprød på en tør pande. Lad den dryppe af på et stykke køkkenrulle.',
-      'Pisk æg, madlavningsfløde og revet ost sammen i en skål, og krydr med masser af sort peber.',
+      'Steg baconen sprød på en tør pande. Let den dryppe af på et stykke køkkenrulle.',
+      'Pisk æg, madlavningsfløde og revet ost sammen i en skål, og krydr med masser og sort peber.',
       'Hæld vandet fra spaghettien, men gem en smule pastavand.',
       'Tag panden af varmen. Hæld spaghettien og baconen over i skålen med æggeblandingen, og vend det hurtigt rundt, så æggemassen cremer sig uden at koagulere (tilsæt evt. en skefuld pastavand).',
       'Server med det samme med ekstra ost på toppen.'
@@ -328,6 +343,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 40,
     servings: 4,
     tags: ['Klassisk', 'Dansk', 'Familievenlig'],
+    healthScore: 6,
+    tips: {
+      healthier: 'Server retten med brune ris eller blomkålsris, og tilsæt ekstra revet æble og fintsnittet porre direkte i karrysaucen.',
+      cheaper: 'Du kan spæde svinefarsen op med havregryn og revet kartoffel. Det øger volumen betydeligt og sparer ca. 12 kr. på kødet.'
+    },
     ingredients: [
       { name: 'Hakket svinekød', displayName: 'Hakket svine- & kalvekød', amount: '500g' },
       { name: 'Ris', displayName: 'Jasmin ris', amount: '300g' },
@@ -355,6 +375,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 30,
     servings: 4,
     tags: ['Sund', 'Hurtig', 'Mindre end 30 min'],
+    healthScore: 8,
+    tips: {
+      healthier: 'Erstat madlavningsfløde 18% med kokosmælk light eller græsk yoghurt (rørt i til sidst) for at reducere mængden af mættet fedt.',
+      cheaper: 'Køb frossen kyllingebryst på tilbud og optø det – det er ofte 20-30% billigere end ferske kyllingefileter.'
+    },
     ingredients: [
       { name: 'Kyllingebrystfilet', displayName: 'Kyllingebrystfilet', amount: '450g' },
       { name: 'Ris', displayName: 'Jasmin ris', amount: '300g' },
@@ -382,6 +407,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 25,
     servings: 3,
     tags: ['Vegetarisk', 'Sund', 'Billig'],
+    healthScore: 9,
+    tips: {
+      healthier: 'Tilsæt en stor håndfuld frisk spinat til sidst og lad den falde sammen i gryden. Server med brune basmati ris.',
+      cheaper: 'Tørrede røde linser koster under 10 kr. pr. pose i Rema 1000 og Coop 365. Lav dobbelt portion og frys ned som sund fastfood!'
+    },
     ingredients: [
       { name: 'Tørrede røde linser', displayName: 'Tørrede røde linser', amount: '250g' },
       { name: 'Dåse hakkede tomater', displayName: 'Hakkede tomater', amount: '1 dåse (400g)' },
@@ -409,6 +439,11 @@ export const INITIAL_RECIPES: Recipe[] = [
     prepTime: 25,
     servings: 2,
     tags: ['Nem', 'Fisk', 'Sund'],
+    healthScore: 7,
+    tips: {
+      healthier: 'Reducer mængden af madlavningsfløde, brug ekstra citronsaft og drys med frisk dild for en kaloriefattig version.',
+      cheaper: 'Køb en hel lakseside på tilbud i Meny eller Føtex, skær den selv ud i steaks og frys ned. Det sparer over 20-30 kr. pr. kilo!'
+    },
     ingredients: [
       { name: 'Frisk laksesteak', displayName: 'Friske laksesteaks', amount: '2 stk (250g)' },
       { name: 'Friske porrer', displayName: 'Porrer', amount: '2 stk' },
@@ -561,6 +596,11 @@ export const SCRAPED_RECIPES_POOL: Recipe[] = [
     prepTime: 25,
     servings: 4,
     tags: ['Asiatisk', 'Sund', 'Scrapet'],
+    healthScore: 8,
+    tips: {
+      healthier: 'Brug kokosmælk light frem for almindelig kokosmælk for at skære ned på kalorierne, og tilsæt ekstra porrer og broccoli.',
+      cheaper: 'Wokretter er geniale til grøntsagsskuffens rester! Brug ugens ugetilbud på løg eller peberfrugt for at spare penge.'
+    },
     ingredients: [
       { name: 'Kyllingebrystfilet', displayName: 'Kyllingebrystfilet', amount: '450g' },
       { name: 'Kokosmælk økologisk', displayName: 'Kokosmælk', amount: '1 dåse (400ml)' },
@@ -585,6 +625,11 @@ export const SCRAPED_RECIPES_POOL: Recipe[] = [
     prepTime: 10,
     servings: 2,
     tags: ['Frokost', 'Hurtig', 'Uden ovn'],
+    healthScore: 9,
+    tips: {
+      healthier: 'Brug et 100% økologisk fuldkornsrugbrød for at få flest mulige fibre og den længste mæthedsfornemmelse.',
+      cheaper: 'Hvis frisk laksesteak er for dyrt, kan du erstatte det med dåsetun eller makrel i tomat af høj kvalitet (sparer ca. 18 kr.).'
+    },
     ingredients: [
       { name: 'Rugbrød softkerne', displayName: 'Rugbrød softkerne', amount: '2 skiver' },
       { name: 'Frisk laksesteak', displayName: 'Varmrøget eller dampet laks', amount: '120g' },

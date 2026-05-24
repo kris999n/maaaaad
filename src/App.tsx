@@ -46,6 +46,17 @@ interface ShoppingCartItem {
   checked: boolean;
 }
 
+interface IngredientPriceInfo {
+  onSale: boolean;
+  price: number;
+  normalPrice: number;
+  saving: number;
+  store: string;
+  displayName: string;
+  unit: string;
+  inFridge?: boolean;
+}
+
 // Scraper log structure
 interface LogMessage {
   text: string;
@@ -92,6 +103,13 @@ export default function App() {
   const [includeMemberDeals, setIncludeMemberDeals] = useState<boolean>(true);
   const [dealsViewMode, setDealsViewMode] = useState<'list' | 'small' | 'large'>('list');
   const [recipesViewMode, setRecipesViewMode] = useState<'list' | 'small' | 'large'>('large');
+  
+  // Phase 5: Sorting & Zero Waste States
+  const [dealsSortBy, setDealsSortBy] = useState<'saving' | 'price' | 'name'>('saving');
+  const [recipesSortBy, setRecipesSortBy] = useState<'match' | 'price' | 'time' | 'health'>('match');
+  const [fridgeItems, setFridgeItems] = useState<string[]>([]);
+  const [newFridgeItem, setNewFridgeItem] = useState<string>('');
+  const [isFridgeOpen, setIsFridgeOpen] = useState<boolean>(false);
   
   // Scraper Accordion State in Settings
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
@@ -195,7 +213,7 @@ export default function App() {
   };
 
   // Normal fallback prices for common foods when they are not on sale (Pantry fallbacks)
-  const getIngredientNormalPriceInfo = (ingredientName: string) => {
+  const getIngredientNormalPriceInfo = (ingredientName: string): IngredientPriceInfo => {
     const fallbackNormalPrices: Record<string, { price: number, unit: string }> = {
       'lasagneplader': { price: 12, unit: '500g' },
       'letmælk': { price: 12, unit: '1 liter' },
@@ -246,7 +264,26 @@ export default function App() {
 
   // Helper matching engine to find best deals or normal price fallbacks for ingredients
   // Matched deals are strictly filtered by activeStores chosen in Settings!
-  const getIngredientPriceInfo = (ingredientName: string) => {
+  const getIngredientPriceInfo = (ingredientName: string): IngredientPriceInfo => {
+    // Zero waste leftovers check first!
+    const isOwned = fridgeItems.some(item => 
+      item.trim().toLowerCase() === ingredientName.trim().toLowerCase() ||
+      ingredientName.toLowerCase().includes(item.trim().toLowerCase())
+    );
+    
+    if (isOwned) {
+      return {
+        onSale: true,
+        inFridge: true,
+        price: 0,
+        normalPrice: 0,
+        saving: 0,
+        store: 'Mit Køleskab',
+        displayName: `${ingredientName} (Ejes)`,
+        unit: 'I køleskab'
+      };
+    }
+
     const matchedDeals = matcherDeals.filter(d => 
       activeStores.includes(d.store) && (
         d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
@@ -281,6 +318,14 @@ export default function App() {
       recipe.ingredients.forEach(ing => {
         if (ing.isBasis) return;
         
+        // Zero waste leftovers check
+        const isOwned = fridgeItems.some(item => 
+          item.trim().toLowerCase() === ing.name.trim().toLowerCase() ||
+          ing.name.toLowerCase().includes(item.trim().toLowerCase())
+        );
+        
+        if (isOwned) return; // Already owned! Cost is 0, so skip adding to totals!
+
         const matchedDeals = matcherDeals.filter(d => 
           d.store === storeName && (
             d.item.toLowerCase().includes(ing.name.toLowerCase()) || 
@@ -317,7 +362,26 @@ export default function App() {
     strategy: 'mix' | 'single' | 'specific',
     specificStoreName: string,
     cheapestSingleStoreName: string
-  ) => {
+  ): IngredientPriceInfo => {
+    // Zero waste leftovers check first!
+    const isOwned = fridgeItems.some(item => 
+      item.trim().toLowerCase() === ingredientName.trim().toLowerCase() ||
+      ingredientName.toLowerCase().includes(item.trim().toLowerCase())
+    );
+    
+    if (isOwned) {
+      return {
+        onSale: true,
+        inFridge: true,
+        price: 0,
+        normalPrice: 0,
+        saving: 0,
+        store: 'Mit Køleskab',
+        displayName: `${ingredientName} (Ejes)`,
+        unit: 'I køleskab'
+      };
+    }
+
     if (strategy === 'mix') {
       return getIngredientPriceInfo(ingredientName);
     }
@@ -397,6 +461,26 @@ export default function App() {
   // Calculate default recipe stats for list views (always uses mix strategy)
   const calculateRecipeStats = (recipe: Recipe) => {
     return calculateRecipeStatsWithStrategy(recipe, 'mix', 'Rema 1000');
+  };
+
+  // Zero Waste Fridge left-overs helper controls
+  const handleAddFridgeItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    const item = newFridgeItem.trim();
+    if (item) {
+      if (!fridgeItems.some(i => i.toLowerCase() === item.toLowerCase())) {
+        setFridgeItems(prev => [...prev, item]);
+        setNewFridgeItem('');
+        showToast(`Tilføjede "${item}" til dit køleskab!`);
+      } else {
+        showToast(`"${item}" er allerede i dit køleskab`);
+      }
+    }
+  };
+
+  const handleRemoveFridgeItem = (itemToRemove: string) => {
+    setFridgeItems(prev => prev.filter(item => item !== itemToRemove));
+    showToast(`Fjernet "${itemToRemove}" fra dit køleskab`);
   };
 
   // Add individual deal to shopping list
@@ -624,11 +708,25 @@ export default function App() {
     return matchesSearch && matchesStore && matchesCategory;
   });
 
-  // Sort recipes by Match Score (highest first)
+  // Sort deals based on dealsSortBy state
+  const sortedDeals = [...filteredDeals].sort((a, b) => {
+    if (dealsSortBy === 'price') return a.price - b.price;
+    if (dealsSortBy === 'saving') return b.saving - a.saving;
+    if (dealsSortBy === 'name') return a.item.localeCompare(b.item, 'da');
+    return 0;
+  });
+
+  // Sort recipes by chosen sorting method
   const sortedRecipes = [...recipes].map(recipe => {
     const stats = calculateRecipeStats(recipe);
     return { ...recipe, stats };
-  }).sort((a, b) => b.stats.matchScore - a.stats.matchScore);
+  }).sort((a, b) => {
+    if (recipesSortBy === 'price') return a.stats.totalPrice - b.stats.totalPrice;
+    if (recipesSortBy === 'time') return a.prepTime - b.prepTime;
+    if (recipesSortBy === 'health') return (b.healthScore || 5) - (a.healthScore || 5);
+    if (recipesSortBy === 'match') return b.stats.matchScore - a.stats.matchScore;
+    return 0;
+  });
 
   return (
     <div className="app-container">
@@ -816,38 +914,51 @@ export default function App() {
             <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{filteredDeals.length} tilbud fundet</span>
               
-              {/* Segmented View Switcher */}
-              <div className="view-switcher">
-                <button 
-                  className={`view-btn ${dealsViewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => setDealsViewMode('list')}
-                  title="Liste"
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Sorter efter selector */}
+                <select 
+                  className="sort-select"
+                  value={dealsSortBy}
+                  onChange={(e) => setDealsSortBy(e.target.value as any)}
                 >
-                  <List size={13} />
-                  <span>Liste</span>
-                </button>
-                <button 
-                  className={`view-btn ${dealsViewMode === 'small' ? 'active' : ''}`}
-                  onClick={() => setDealsViewMode('small')}
-                  title="Fliser"
-                >
-                  <Grid size={13} />
-                  <span>Fliser</span>
-                </button>
-                <button 
-                  className={`view-btn ${dealsViewMode === 'large' ? 'active' : ''}`}
-                  onClick={() => setDealsViewMode('large')}
-                  title="Kort"
-                >
-                  <Layout size={13} />
-                  <span>Kort</span>
-                </button>
+                  <option value="saving">Sorter: Mest besparelse</option>
+                  <option value="price">Sorter: Laveste pris</option>
+                  <option value="name">Sorter: Navn (A-Å)</option>
+                </select>
+
+                {/* Segmented View Switcher */}
+                <div className="view-switcher">
+                  <button 
+                    className={`view-btn ${dealsViewMode === 'list' ? 'active' : ''}`}
+                    onClick={() => setDealsViewMode('list')}
+                    title="Liste"
+                  >
+                    <List size={13} />
+                    <span>Liste</span>
+                  </button>
+                  <button 
+                    className={`view-btn ${dealsViewMode === 'small' ? 'active' : ''}`}
+                    onClick={() => setDealsViewMode('small')}
+                    title="Fliser"
+                  >
+                    <Grid size={13} />
+                    <span>Fliser</span>
+                  </button>
+                  <button 
+                    className={`view-btn ${dealsViewMode === 'large' ? 'active' : ''}`}
+                    onClick={() => setDealsViewMode('large')}
+                    title="Kort"
+                  >
+                    <Layout size={13} />
+                    <span>Kort</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className={`deals-grid view-${dealsViewMode}`} style={{ flex: 1, overflowY: 'auto' }}>
-              {filteredDeals.length > 0 ? (
-                filteredDeals.map(deal => {
+              {sortedDeals.length > 0 ? (
+                sortedDeals.map(deal => {
                   const isAdded = shoppingList.some(item => item.id === deal.id);
                   const storeStyle = SUPERMARKETS.find(s => s.name === deal.store);
                   return (
@@ -907,35 +1018,165 @@ export default function App() {
               </p>
             </div>
 
+            {/* Zero Waste Fridge leftovers input panel */}
+            <div className="zero-waste-panel" style={{ marginBottom: '16px' }}>
+              <div 
+                className="zero-waste-header" 
+                onClick={() => setIsFridgeOpen(!isFridgeOpen)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 14px',
+                  backgroundColor: 'var(--bg-primary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-soft)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} style={{ color: 'var(--accent-green)' }} />
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>Zero Waste: Tøm dit køleskab</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 400, marginTop: '2px' }}>
+                      {fridgeItems.length > 0 
+                        ? `${fridgeItems.length} leftover varer gemt. Sparer penge automatisk!` 
+                        : 'Har du rester liggende? Tilføj dem og spar penge automatisk!'}
+                    </div>
+                  </div>
+                </div>
+                {isFridgeOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </div>
+
+              {isFridgeOpen && (
+                <div 
+                  className="zero-waste-body"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    borderTop: 'none',
+                    borderBottomLeftRadius: '12px',
+                    borderBottomRightRadius: '12px',
+                    padding: '14px',
+                    marginTop: '-4px',
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                  }}
+                >
+                  <form onSubmit={handleAddFridgeItem} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <input 
+                      type="text"
+                      className="fridge-input"
+                      placeholder="Skriv rest, fx 'gulerødder', 'letmælk'..."
+                      value={newFridgeItem}
+                      onChange={(e) => setNewFridgeItem(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        backgroundColor: 'var(--bg-primary)'
+                      }}
+                    />
+                    <button 
+                      type="submit"
+                      className="btn-add-fridge"
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: 'var(--text-primary)',
+                        color: 'var(--bg-primary)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Tilføj
+                    </button>
+                  </form>
+
+                  {fridgeItems.length > 0 ? (
+                    <div className="fridge-chips-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {fridgeItems.map(item => (
+                        <span 
+                          key={item} 
+                          className="fridge-chip"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            backgroundColor: '#E6F6EE',
+                            color: '#00A859',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(0, 168, 89, 0.1)'
+                          }}
+                        >
+                          {item}
+                          <X 
+                            size={12} 
+                            onClick={() => handleRemoveFridgeItem(item)}
+                            style={{ cursor: 'pointer', opacity: 0.8 }}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0' }}>
+                      Køleskabet er tomt. Skriv en ingrediens ovenfor for at starte.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 12px 0' }}>
               <span>{sortedRecipes.length} retter foreslået</span>
               
-              {/* Segmented View Switcher */}
-              <div className="view-switcher">
-                <button 
-                  className={`view-btn ${recipesViewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => setRecipesViewMode('list')}
-                  title="Liste"
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Sorter efter selector */}
+                <select 
+                  className="sort-select"
+                  value={recipesSortBy}
+                  onChange={(e) => setRecipesSortBy(e.target.value as any)}
                 >
-                  <List size={13} />
-                  <span>Liste</span>
-                </button>
-                <button 
-                  className={`view-btn ${recipesViewMode === 'small' ? 'active' : ''}`}
-                  onClick={() => setRecipesViewMode('small')}
-                  title="Fliser"
-                >
-                  <Grid size={13} />
-                  <span>Fliser</span>
-                </button>
-                <button 
-                  className={`view-btn ${recipesViewMode === 'large' ? 'active' : ''}`}
-                  onClick={() => setRecipesViewMode('large')}
-                  title="Kort"
-                >
-                  <Layout size={13} />
-                  <span>Kort</span>
-                </button>
+                  <option value="match">Sorter: Bedste match</option>
+                  <option value="price">Sorter: Laveste pris</option>
+                  <option value="time">Sorter: Korteste tid</option>
+                  <option value="health">Sorter: Sundeste</option>
+                </select>
+
+                {/* Segmented View Switcher */}
+                <div className="view-switcher">
+                  <button 
+                    className={`view-btn ${recipesViewMode === 'list' ? 'active' : ''}`}
+                    onClick={() => setRecipesViewMode('list')}
+                    title="Liste"
+                  >
+                    <List size={13} />
+                    <span>Liste</span>
+                  </button>
+                  <button 
+                    className={`view-btn ${recipesViewMode === 'small' ? 'active' : ''}`}
+                    onClick={() => setRecipesViewMode('small')}
+                    title="Fliser"
+                  >
+                    <Grid size={13} />
+                    <span>Fliser</span>
+                  </button>
+                  <button 
+                    className={`view-btn ${recipesViewMode === 'large' ? 'active' : ''}`}
+                    onClick={() => setRecipesViewMode('large')}
+                    title="Kort"
+                  >
+                    <Layout size={13} />
+                    <span>Kort</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1479,7 +1720,19 @@ export default function App() {
                             {priceInfo.price} kr.
                           </span>
                           <div style={{ marginTop: '2px' }}>
-                            {priceInfo.onSale ? (
+                            {priceInfo.inFridge ? (
+                              <span className="store-tag" style={{
+                                backgroundColor: '#E6F6EE',
+                                color: '#00A859',
+                                fontSize: '8px',
+                                padding: '1px 4px',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                border: '1px solid rgba(0, 168, 89, 0.1)'
+                              }}>
+                                Rest i køleskab
+                              </span>
+                            ) : priceInfo.onSale ? (
                               <span className="store-tag" style={{
                                 backgroundColor: storeStyle?.bgColor,
                                 color: storeStyle?.color,
@@ -1507,6 +1760,56 @@ export default function App() {
                     );
                   })}
                 </div>
+
+                {/* maaaaad tips — Sundere & Billigere */}
+                {selectedRecipe.tips && (
+                  <div className="maaaaad-tips-container" style={{ marginBottom: '20px' }}>
+                    <div className="modal-section-title" style={{ marginTop: '20px' }}>maaaaad tips — Sundere & Billigere</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div 
+                        className="tip-box healthier-tip"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          backgroundColor: '#F4FAFF',
+                          border: '1px solid rgba(0, 89, 179, 0.1)',
+                          borderRadius: '10px',
+                          padding: '12px 14px'
+                        }}
+                      >
+                        <Sparkles size={16} style={{ color: '#0059B3', flexShrink: 0, marginTop: '2px' }} />
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#0059B3', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Sundere tip</div>
+                          <div style={{ fontSize: '11.5px', color: '#1b3a4b', marginTop: '3px', lineHeight: '1.4' }}>
+                            {selectedRecipe.tips.healthier}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div 
+                        className="tip-box cheaper-tip"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          backgroundColor: '#E6F6EE',
+                          border: '1px solid rgba(0, 168, 89, 0.1)',
+                          borderRadius: '10px',
+                          padding: '12px 14px'
+                        }}
+                      >
+                        <Tag size={16} style={{ color: '#00A859', flexShrink: 0, marginTop: '2px' }} />
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#00A859', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Billigere tip</div>
+                          <div style={{ fontSize: '11.5px', color: '#1b3d2b', marginTop: '3px', lineHeight: '1.4' }}>
+                            {selectedRecipe.tips.cheaper}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="modal-section-title">Fremgangsmåde</div>
                 <div style={{ marginBottom: '20px' }}>
