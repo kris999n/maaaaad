@@ -1225,3 +1225,223 @@ body {
   flex-shrink: 0;
   color: var(--text-primary);
 }
+
+/* ===============================================================
+   PHASE 2: SETTINGS & SMART SHOPPING LIST STYLES
+   =============================================================== */
+
+/* Settings Tab Styles */
+.settings-group {
+  margin-bottom: 24px;
+}
+
+.settings-group h3 {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+.settings-list {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-medium);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  transition: var(--transition-fast);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Elegant iOS Toggle Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E5E5EA;
+  transition: .25s ease;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+input:checked + .slider {
+  background-color: var(--text-primary);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* Accordion Collapsible Box for Settings */
+.accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  cursor: pointer;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-medium);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: var(--transition-fast);
+}
+
+.accordion-header:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.accordion-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  opacity: 0;
+}
+
+.accordion-content.open {
+  max-height: 520px;
+  opacity: 1;
+  padding-top: 14px;
+  overflow-y: auto;
+}
+
+/* Smart Shopping Input UI */
+.shopping-input-container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-medium);
+  padding: 12px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.shopping-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.shopping-input-row input {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-small);
+  padding: 10px 14px;
+  font-size: 13.5px;
+  outline: none;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: var(--transition-fast);
+}
+
+.shopping-input-row input:focus {
+  border-color: #A0A0A0;
+}
+
+.shopping-input-row select {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-small);
+  padding: 10px;
+  font-size: 13px;
+  outline: none;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  width: 105px;
+  cursor: pointer;
+}
+
+.shopping-input-row button {
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--border-radius-small);
+  width: 38px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.shopping-input-row button:active {
+  transform: scale(0.95);
+}
+
+.suggestion-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--accent-green-light);
+  border: 1px solid var(--accent-green-border);
+  border-radius: var(--border-radius-small);
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-green);
+  cursor: pointer;
+  animation: fadeInSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(45, 106, 79, 0.05);
+}
+
+.suggestion-chip-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+@keyframes fadeInSlideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

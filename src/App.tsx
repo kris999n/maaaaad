@@ -14,7 +14,10 @@ import {
   X, 
   Info, 
   Sparkles, 
-  Database
+  Database,
+  Settings,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import type { Deal, Recipe } from './data/mockData';
 import { 
@@ -47,8 +50,8 @@ interface LogMessage {
 }
 
 export default function App() {
-  // App navigation
-  const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'scraper'>('home');
+  // App navigation (Phase 2: replaced 'scraper' with 'settings')
+  const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
   
   // Database States (updated by Scraper)
   const [deals, setDeals] = useState<Deal[]>(INITIAL_DEALS);
@@ -57,12 +60,28 @@ export default function App() {
   // Interactive Shopping List
   const [shoppingList, setShoppingList] = useState<ShoppingCartItem[]>([]);
   
+  // Phase 2: Store selection filter (User's stores)
+  const [activeStores, setActiveStores] = useState<string[]>(SUPERMARKETS.map(s => s.name));
+  
+  // Phase 2: Auto-scraping settings
+  const [autoScrape, setAutoScrape] = useState<boolean>(true);
+  const [isAutoScraped, setIsAutoScraped] = useState<boolean>(false);
+  const [isAutoScrapingActive, setIsAutoScrapingActive] = useState<boolean>(false);
+  
+  // Phase 2: Custom shopping item inputs
+  const [customItemName, setCustomItemName] = useState('');
+  const [customItemStore, setCustomItemStore] = useState('Fælles indkøb');
+  const [suggestedDeal, setSuggestedDeal] = useState<Deal | null>(null);
+
   // UI States
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState('Alle');
   const [selectedCategory, setSelectedCategory] = useState('Alle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Scraper Accordion State in Settings
+  const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
   
   // Scraper Engine States
   const [scraperStatus, setScraperStatus] = useState<'idle' | 'scraping' | 'completed'>('idle');
@@ -82,18 +101,87 @@ export default function App() {
     }
   }, [scraperLogs]);
 
+  // Phase 2: Simulated background auto-scraping on app launch
+  useEffect(() => {
+    if (autoScrape && !isAutoScraped) {
+      // Set indicator that auto-scraping is in progress
+      setIsAutoScrapingActive(true);
+      
+      const timer = setTimeout(() => {
+        setDeals(prev => {
+          const originalDeals = prev.filter(d => !d.id.startsWith('sc_'));
+          return [...originalDeals, ...SCRAPED_DEALS_POOL];
+        });
+        setRecipes(prev => {
+          const originalRecipes = prev.filter(r => !r.id.startsWith('rec_sc_'));
+          return [...originalRecipes, ...SCRAPED_RECIPES_POOL];
+        });
+        setIsAutoScraped(true);
+        setIsAutoScrapingActive(false);
+        
+        setScraperLogs(prev => [
+          ...prev,
+          { text: '[AUTO] Ugens nye tilbudsaviser blev automatisk indlæst og matchet!', type: 'success', time: getCurrentTime() }
+        ]);
+        showToast('⚡️ Ugens nye tilbudsaviser er automatisk indlæst!');
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoScrape, isAutoScraped]);
+
+  // Phase 2: Search for matches on sale as the user types custom shopping list items
+  useEffect(() => {
+    const query = customItemName.trim().toLowerCase();
+    if (query.length > 1) {
+      // Find matching deal from the user's ACTIVE stores
+      const matches = deals.filter(d => 
+        activeStores.includes(d.store) && 
+        (d.item.toLowerCase().includes(query) || query.includes(d.item.toLowerCase()))
+      );
+      if (matches.length > 0) {
+        // Recommend the best deal (cheapest first)
+        const best = [...matches].sort((a, b) => a.price - b.price)[0];
+        setSuggestedDeal(best);
+      } else {
+        setSuggestedDeal(null);
+      }
+    } else {
+      setSuggestedDeal(null);
+    }
+  }, [customItemName, deals, activeStores]);
+
   // Toast Helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
+  // Phase 2: Toggle supermarket setting checkbox
+  const toggleStoreSetting = (storeName: string) => {
+    setActiveStores(prev => {
+      if (prev.includes(storeName)) {
+        if (prev.length === 1) {
+          showToast('Vælg venligst mindst én butik!');
+          return prev;
+        }
+        showToast(`Gemte ${storeName}-tilbud`);
+        return prev.filter(s => s !== storeName);
+      } else {
+        showToast(`Viser nu tilbud fra ${storeName}`);
+        return [...prev, storeName];
+      }
+    });
+  };
+
   // Helper matching engine to find best deals or normal price fallbacks for ingredients
+  // Phase 2: Matched deals are strictly filtered by activeStores chosen in Settings!
   const getIngredientPriceInfo = (ingredientName: string) => {
-    // Exclude basic pantry items
     const matchedDeals = deals.filter(d => 
-      d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
-      ingredientName.toLowerCase().includes(d.item.toLowerCase())
+      activeStores.includes(d.store) && (
+        d.item.toLowerCase().includes(ingredientName.toLowerCase()) || 
+        ingredientName.toLowerCase().includes(d.item.toLowerCase())
+      )
     );
     
     if (matchedDeals.length > 0) {
@@ -192,7 +280,6 @@ export default function App() {
 
   // Add individual deal to shopping list
   const addDealToShoppingList = (deal: Deal) => {
-    // Check if already in list
     const exists = shoppingList.some(item => item.id === deal.id);
     if (exists) {
       setShoppingList(prev => prev.filter(item => item.id !== deal.id));
@@ -216,6 +303,37 @@ export default function App() {
     showToast(`Tilføjet ${deal.item} (${deal.store}) til indkøbslisten!`);
   };
 
+  // Add custom typed item to shopping list (Phase 2 feature)
+  const handleAddCustomItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customItemName.trim()) return;
+
+    const newItem: ShoppingCartItem = {
+      id: `custom-${Date.now()}`,
+      name: customItemName.trim(),
+      displayName: customItemName.trim(),
+      price: 0, // Manual items have 0 kr since no price is known
+      normalPrice: 0,
+      saving: 0,
+      store: customItemStore === 'Fælles indkøb' ? 'Fælles indkøb' : customItemStore,
+      unit: 'stk',
+      checked: false
+    };
+
+    setShoppingList(prev => [newItem, ...prev]);
+    showToast(`Tilføjet "${customItemName.trim()}" til indkøbslisten!`);
+    setCustomItemName('');
+    setSuggestedDeal(null);
+  };
+
+  // Add the recommended deal instead of the typed custom text (Phase 2 smart helper)
+  const addSuggestedDealDirectly = () => {
+    if (!suggestedDeal) return;
+    addDealToShoppingList(suggestedDeal);
+    setCustomItemName('');
+    setSuggestedDeal(null);
+  };
+
   // Add recipe ingredients to shopping list
   const addRecipeToShoppingList = (recipe: Recipe) => {
     let addedCount = 0;
@@ -225,8 +343,6 @@ export default function App() {
       if (ing.isBasis) return; // Ignore basis items like salt, pepper, garlic
       
       const priceInfo = getIngredientPriceInfo(ing.name);
-      
-      // Prevent duplicates from same recipe/store combo
       const itemKey = `${recipe.id}-${ing.name}-${priceInfo.store}`;
       const exists = shoppingList.some(item => item.id === itemKey);
       
@@ -331,9 +447,8 @@ export default function App() {
     }, 5800);
 
     setTimeout(() => {
-      // Injection of new mock data after scrape finishes!
+      // Injection of new mock data after scrape finishes
       setDeals(prev => {
-        // Filter out any previously scraped console items to avoid duplicates
         const originalDeals = prev.filter(d => !d.id.startsWith('sc_'));
         return [...originalDeals, ...SCRAPED_DEALS_POOL];
       });
@@ -346,6 +461,7 @@ export default function App() {
       appendLog('[DATABASE] Succes! Indlæst 10 nye ugentlige megakup og 2 nye opskrifter.', 'success');
       appendLog('Scraping færdig. Alle opskrifter har fået opdateret deres Match Score!', 'success');
       setScraperStatus('completed');
+      setIsAutoScraped(true); // Don't run auto-scrape if they ran manually
       showToast('Scraper færdig! Nye tilbud og opskrifter indlæst.');
     }, 6500);
   };
@@ -367,11 +483,13 @@ export default function App() {
   const totalNormalShoppingPrice = shoppingList.reduce((acc, item) => acc + (item.checked ? 0 : item.normalPrice), 0);
   const totalShoppingSavings = totalNormalShoppingPrice - totalShoppingPrice;
 
-  // Filter deals
+  // Filter deals based on searchQuery, store filter (from ActiveStores only!)
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = deal.item.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           deal.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStore = selectedStore === 'Alle' || deal.store === selectedStore;
+    // Must be in activeStores chosen in Settings!
+    const isStoreActive = activeStores.includes(deal.store);
+    const matchesStore = selectedStore === 'Alle' ? isStoreActive : (deal.store === selectedStore && isStoreActive);
     const matchesCategory = selectedCategory === 'Alle' || deal.category === selectedCategory;
     return matchesSearch && matchesStore && matchesCategory;
   });
@@ -391,6 +509,16 @@ export default function App() {
       <div className="app-status-bar">
         <span className="time">16:24</span>
         <div className="status-icons">
+          {isAutoScrubbing()}
+          {isAutoScrapingActive ? (
+            <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '10px', animation: 'pulse 1s infinite alternate', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span className="console-dot" style={{ width: '5px', height: '5px' }}></span> Auto-updater...
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-secondary)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span className="console-dot" style={{ width: '5px', height: '5px', backgroundColor: isAutoScraped ? 'var(--accent-green)' : '#999' }}></span> Scraper klar
+            </span>
+          )}
           <Database size={13} style={{ opacity: 0.8 }} />
           <span>5G</span>
           <span style={{ fontSize: '11px', marginLeft: '2px' }}>100%</span>
@@ -417,19 +545,22 @@ export default function App() {
               <div className="highlight-banner-text">
                 <h3>Klar til at spare stort?</h3>
                 <p>
-                  Vi har scannet 6 store supermarkeder. Lav dine yndlingsretter op til <b>52% billigere</b> i denne uge!
+                  Vi scanner ugentligt {activeStores.length} butikker. Lav dine yndlingsretter op til <b>52% billigere</b> netop nu!
                 </p>
               </div>
             </div>
 
             <div className="home-summary-stats">
               <div className="stat-box">
-                <div className="number">{deals.length}</div>
-                <div className="label">Aktive Tilbud</div>
+                {/* Count active deals from checked stores only */}
+                <div className="number">
+                  {deals.filter(d => activeStores.includes(d.store)).length}
+                </div>
+                <div className="label">Ugens Kup</div>
               </div>
               <div className="stat-box">
                 <div className="number">{recipes.length}</div>
-                <div className="label">Opskrifter Matchet</div>
+                <div className="label">Matcher Retter</div>
               </div>
             </div>
 
@@ -439,7 +570,7 @@ export default function App() {
             </div>
 
             <div className="deals-carousel">
-              {deals.filter(d => d.saving >= 12).slice(0, 6).map(deal => {
+              {deals.filter(d => d.saving >= 12 && activeStores.includes(d.store)).slice(0, 6).map(deal => {
                 const isAdded = shoppingList.some(item => item.id === deal.id);
                 return (
                   <div key={deal.id} className="carousel-card">
@@ -496,7 +627,7 @@ export default function App() {
             <div className="card" style={{ padding: '14px', backgroundColor: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Info size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                Appen simulerer live-scraping. Gå til <b>Scraper</b> fanen i menuen for at hente de nyeste tilbud og opskrifter.
+                Mine butikker: {activeStores.join(', ')}. Slå uønskede butikker fra under <b>Indstillinger</b> for at optimere dine madplaner.
               </p>
             </div>
           </div>
@@ -521,15 +652,15 @@ export default function App() {
               {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-tertiary)' }} />}
             </div>
 
-            {/* Store selection slider */}
+            {/* Store selection slider (shows only checked stores!) */}
             <div className="horizontal-selector">
               <div 
                 className={`selector-pill ${selectedStore === 'Alle' ? 'active' : ''}`}
                 onClick={() => setSelectedStore('Alle')}
               >
-                Alle butikker
+                Aktive butikker
               </div>
-              {SUPERMARKETS.map(store => (
+              {SUPERMARKETS.filter(s => activeStores.includes(s.name)).map(store => (
                 <div 
                   key={store.name} 
                   className={`selector-pill ${selectedStore === store.name ? 'active' : ''}`}
@@ -592,8 +723,8 @@ export default function App() {
                   );
                 })
               ) : (
-                <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-secondary)' }}>
-                  Ingen tilbud matchede din søgning. Prøv at skifte butik eller søgeterm.
+                <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  Ingen tilbud fundet. Prøv at søge efter noget andet eller tjek dine butiksindstillinger.
                 </div>
               )}
             </div>
@@ -611,13 +742,12 @@ export default function App() {
             <div className="highlight-banner" style={{ padding: '12px 14px', marginBottom: '16px' }}>
               <Info size={16} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
               <p style={{ fontSize: '11.5px', color: '#3b5a4a', lineHeight: 1.4 }}>
-                Retter sorteres automatisk efter <b>Match Score</b>. Jo flere ingredienser der er på tilbud, jo højere score og større besparelse!
+                Beregnes udelukkende på tilbud fra dine <b>{activeStores.length} aktive butikker</b>. Du kan slå flere butikker til under Indstillinger!
               </p>
             </div>
 
             <div className="recipes-grid">
               {sortedRecipes.map(recipe => {
-                // Style variables for match score
                 let badgeClass = 'badge-gray';
                 let scoreText = 'Ingen kup';
                 
@@ -697,12 +827,49 @@ export default function App() {
               )}
             </div>
 
+            {/* Smart input bar at the top of shopping list (Phase 2 feature) */}
+            <div className="shopping-input-container">
+              <form onSubmit={handleAddCustomItem} className="shopping-input-row">
+                <input 
+                  type="text" 
+                  placeholder="Tilføj egen vare (fx 'kaffe', 'smør')..." 
+                  value={customItemName}
+                  onChange={(e) => setCustomItemName(e.target.value)}
+                />
+                <select 
+                  value={customItemStore} 
+                  onChange={(e) => setCustomItemStore(e.target.value)}
+                >
+                  <option value="Fælles indkøb">Andet</option>
+                  {SUPERMARKETS.filter(s => activeStores.includes(s.name)).map(s => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+                <button type="submit">
+                  <Plus size={18} />
+                </button>
+              </form>
+
+              {/* Dynamic suggestion card if typed item matches an active deal in active stores */}
+              {suggestedDeal && (
+                <div className="suggestion-chip" onClick={addSuggestedDealDirectly}>
+                  <div className="suggestion-chip-left">
+                    <Sparkles size={13} />
+                    <span>
+                      Ugens kup: <b>{suggestedDeal.item}</b> i <b>{suggestedDeal.store}</b> til kun <b>{suggestedDeal.price} kr.</b> (Spar {suggestedDeal.saving} kr.!)
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '10px', textDecoration: 'underline', fontWeight: 700 }}>Tilføj</span>
+                </div>
+              )}
+            </div>
+
             {shoppingList.length === 0 ? (
               <div className="shopping-empty">
                 <ShoppingCart />
                 <h3>Din indkøbsliste er tom</h3>
                 <p>
-                  Gennemse <b>Tilbud</b> for at tilføje varer manuelt, eller åbn en opskrift under <b>Opskrifter</b> og tilføj alle dens ingredienser på ét klik!
+                  Skriv en vare i feltet ovenfor, eller tilføj tilbud og ingredienser under <b>Tilbud</b> og <b>Opskrifter</b>!
                 </p>
                 <button className="btn-primary" onClick={() => setActiveTab('recipes')}>
                   Find opskrifter nu
@@ -711,7 +878,7 @@ export default function App() {
             ) : (
               <div style={{ flex: 1, overflowY: 'auto' }}>
                 
-                {/* Group items by Supermarket */}
+                {/* Group items by Supermarket / Fælles Indkøb */}
                 {Array.from(new Set(shoppingList.map(item => item.store))).map(storeName => {
                   const storeItems = shoppingList.filter(item => item.store === storeName);
                   const storeStyle = SUPERMARKETS.find(s => s.name === storeName);
@@ -719,7 +886,7 @@ export default function App() {
                     <div key={storeName} className="store-shopping-group">
                       <div className="store-shopping-header">
                         <span className="store-tag" style={{
-                          backgroundColor: storeStyle?.bgColor || '#ECECEC',
+                          backgroundColor: storeStyle?.bgColor || '#F1F3F5',
                           color: storeStyle?.color || 'var(--text-secondary)',
                           fontSize: '11px',
                           padding: '4px 10px',
@@ -749,9 +916,15 @@ export default function App() {
                               </div>
                             </div>
                             <div className="shopping-item-info">
-                              <span className="shopping-item-price">{item.price} kr.</span>
-                              {item.saving > 0 && (
-                                <span className="shopping-item-sale-info">Spar {item.saving} kr.</span>
+                              {item.price > 0 ? (
+                                <>
+                                  <span className="shopping-item-price">{item.price} kr.</span>
+                                  {item.saving > 0 && (
+                                    <span className="shopping-item-sale-info">Spar {item.saving} kr.</span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="shopping-item-price" style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>Egen vare</span>
                               )}
                             </div>
                           </div>
@@ -783,109 +956,169 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 5: SCRAPER CONSOLE */}
-        {activeTab === 'scraper' && (
+        {/* TAB 5: SETTINGS & CONTROLS (Phase 2 tab) */}
+        {activeTab === 'settings' && (
           <div className="page-fade-active" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="header-container">
-              <div className="date">Fuldautomatisk motor</div>
-              <h1>Scraper Dashboard</h1>
+              <div className="date">Personlige præferencer</div>
+              <h1>Indstillinger</h1>
             </div>
 
-            <div className="scraper-stats-row">
-              <div className="stat-box" style={{ padding: '12px' }}>
-                <div className="number" style={{ fontSize: '20px' }}>6</div>
-                <div className="label">Butikker Scannet</div>
-              </div>
-              <div className="stat-box" style={{ padding: '12px' }}>
-                <div className="number" style={{ fontSize: '20px' }}>
-                  {scraperStatus === 'completed' ? 'Opdateret' : 'Standard'}
-                </div>
-                <div className="label">Database Status</div>
-              </div>
-            </div>
-
-            {/* Terminal Screen Container */}
-            <div className="console-container">
-              <div className="console-header">
-                <div className="console-title">
-                  <span className={`console-dot ${scraperStatus === 'scraping' ? 'scraping' : ''}`}></span>
-                  maaaaad-scraper-terminal.sh
-                </div>
-                <span style={{ color: '#57606F', fontSize: '10px', fontFamily: 'monospace' }}>API: ACTIVE</span>
-              </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
               
-              <div className="console-logs">
-                {scraperLogs.map((log, index) => (
-                  <div key={index} className={log.type}>
-                    [{log.time}] {log.text}
-                  </div>
-                ))}
-                <div ref={logsEndRef} />
-              </div>
-            </div>
-
-            {/* Real-time Progress Bars */}
-            {scraperStatus === 'scraping' && (
-              <div className="scraper-progress-section">
-                {Object.entries(scraperProgress).map(([store, progress]) => {
-                  let activeFillClass = 'progress-bar-fill';
-                  if (store === 'Meny') activeFillClass += ' active-meny';
-                  else if (store === 'Rema 1000') activeFillClass += ' active-rema';
-                  else if (store === 'Netto') activeFillClass += ' active-netto';
-                  else if (store === 'Lidl') activeFillClass += ' active-lidl';
-                  else if (store === 'Coop 365') activeFillClass += ' active-coop';
-                  else if (store === 'Føtex') activeFillClass += ' active-fotex';
-                  
-                  return (
-                    <div key={store} className="progress-row">
-                      <div className="progress-info">
-                        <span>{store} API</span>
-                        <span>{progress}%</span>
+              {/* Group 1: Store Configuration */}
+              <div className="settings-group">
+                <h3>Mine supermarkeder</h3>
+                <div className="settings-list">
+                  {SUPERMARKETS.map(store => {
+                    const isActive = activeStores.includes(store.name);
+                    return (
+                      <div key={store.name} className="settings-row" onClick={() => toggleStoreSetting(store.name)}>
+                        <div className="settings-row-label">
+                          <span className="store-tag" style={{
+                            backgroundColor: store.bgColor,
+                            color: store.color || '#333',
+                            fontSize: '11px',
+                            padding: '4px 8px',
+                            borderRadius: '4px'
+                          }}>
+                            {store.name}
+                          </span>
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            {deals.filter(d => d.store === store.name).length} aktive tilbud
+                          </span>
+                        </div>
+                        <label className="switch" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            checked={isActive}
+                            onChange={() => toggleStoreSetting(store.name)}
+                          />
+                          <span className="slider"></span>
+                        </label>
                       </div>
-                      <div className="progress-bar-bg">
-                        <div className={activeFillClass} style={{ width: `${progress}%` }}></div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Group 2: Scraping Configuration */}
+              <div className="settings-group">
+                <h3>Automatiseret scraping</h3>
+                <div className="settings-list">
+                  <div className="settings-row" onClick={() => setAutoScrape(!autoScrape)}>
+                    <div className="settings-row-label">
+                      <div>
+                        <div>Baggrundsscraping</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: 400 }}>
+                          Hent automatisk nye tilbudsaviser ved opstart
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Info and button action */}
-            {scraperStatus !== 'scraping' && (
-              <div className="scraper-info-card" style={{ marginBottom: '16px' }}>
-                <Info size={20} />
-                <div>
-                  <h4>Hvorfor scrape?</h4>
-                  <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    Ugentlige tilbudspriser ændrer sig konstant. Vores scraper henter de nyeste tilbudsaviser og analyserer ingredienser mod populære madblogs for at sikre, at din madplan altid koster mindst muligt!
-                  </p>
+                    <label className="switch" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={autoScrape}
+                        onChange={() => setAutoScrape(!autoScrape)}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <button 
-              className={`btn-primary ${scraperStatus === 'scraping' ? 'disabled' : 'secondary-style'}`}
-              onClick={runScraper}
-              disabled={scraperStatus === 'scraping'}
-              style={{
-                backgroundColor: scraperStatus === 'scraping' ? '#ECECEC' : 'var(--text-primary)',
-                color: scraperStatus === 'scraping' ? '#A0A0A0' : '#FFFFFF',
-                cursor: scraperStatus === 'scraping' ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {scraperStatus === 'scraping' ? (
-                <>
-                  <Cpu className="animate-spin" size={16} />
-                  Scraper tilbud live...
-                </>
-              ) : (
-                <>
-                  <Cpu size={16} />
-                  Start Scraper nu
-                </>
-              )}
-            </button>
+              {/* Group 3: Collapsible Manual Scraper Accordion */}
+              <div className="settings-group">
+                <h3>Avancerede værktøjer</h3>
+                
+                <div 
+                  className="accordion-header" 
+                  onClick={() => setIsConsoleOpen(!isConsoleOpen)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Cpu size={16} />
+                    <span>Scraper Konsol ^& Terminal</span>
+                  </div>
+                  {isConsoleOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+
+                <div className={`accordion-content ${isConsoleOpen ? 'open' : ''}`}>
+                  <div className="scraper-stats-row">
+                    <div className="stat-box" style={{ padding: '10px' }}>
+                      <div className="number" style={{ fontSize: '18px' }}>6</div>
+                      <div className="label">Kilder i alt</div>
+                    </div>
+                    <div className="stat-box" style={{ padding: '10px' }}>
+                      <div className="number" style={{ fontSize: '18px' }}>
+                        {scraperStatus === 'completed' ? 'Opdateret' : 'Standard'}
+                      </div>
+                      <div className="label">Database status</div>
+                    </div>
+                  </div>
+
+                  {/* Terminal Log Console */}
+                  <div className="console-container" style={{ height: '200px' }}>
+                    <div className="console-header">
+                      <div className="console-title">
+                        <span className={`console-dot ${scraperStatus === 'scraping' ? 'scraping' : ''}`}></span>
+                        maaaaad-scraper-terminal.sh
+                      </div>
+                    </div>
+                    <div className="console-logs">
+                      {scraperLogs.map((log, index) => (
+                        <div key={index} className={log.type}>
+                          [{log.time}] {log.text}
+                        </div>
+                      ))}
+                      <div ref={logsEndRef} />
+                    </div>
+                  </div>
+
+                  {/* Progressive Scraper Loader Bars */}
+                  {scraperStatus === 'scraping' && (
+                    <div className="scraper-progress-section" style={{ marginBottom: '14px' }}>
+                      {Object.entries(scraperProgress).map(([store, progress]) => {
+                        let activeFillClass = 'progress-bar-fill';
+                        if (store === 'Meny') activeFillClass += ' active-meny';
+                        else if (store === 'Rema 1000') activeFillClass += ' active-rema';
+                        else if (store === 'Netto') activeFillClass += ' active-netto';
+                        else if (store === 'Lidl') activeFillClass += ' active-lidl';
+                        else if (store === 'Coop 365') activeFillClass += ' active-coop';
+                        else if (store === 'Føtex') activeFillClass += ' active-fotex';
+                        
+                        return (
+                          <div key={store} className="progress-row" style={{ gap: '2px' }}>
+                            <div className="progress-info" style={{ fontSize: '10px' }}>
+                              <span>{store}</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <div className="progress-bar-bg" style={{ height: '4px' }}>
+                              <div className={activeFillClass} style={{ width: `${progress}%` }}></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <button 
+                    className={`btn-primary ${scraperStatus === 'scraping' ? 'disabled' : 'secondary-style'}`}
+                    onClick={runScraper}
+                    disabled={scraperStatus === 'scraping'}
+                    style={{
+                      backgroundColor: scraperStatus === 'scraping' ? '#ECECEC' : 'var(--text-primary)',
+                      color: scraperStatus === 'scraping' ? '#A0A0A0' : '#FFFFFF',
+                      cursor: scraperStatus === 'scraping' ? 'not-allowed' : 'pointer',
+                      padding: '10px 14px',
+                      fontSize: '13px'
+                    }}
+                  >
+                    {scraperStatus === 'scraping' ? 'Arbejder...' : 'Kør manuel scanning'}
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
 
@@ -920,7 +1153,7 @@ export default function App() {
                 </div>
 
                 <div className="modal-section-title">
-                  Ingredienser matchet mod ugens tilbud
+                  Ingredienser matchet mod mine butikker
                 </div>
 
                 <div className="modal-ingredients-list">
@@ -1002,7 +1235,7 @@ export default function App() {
                   }}
                 >
                   <ShoppingCart size={16} />
-                  Tilføj alle ingredienser til indkøbsliste ({stats.totalPrice} kr.)
+                  Tilføj ingredienser ({stats.totalPrice} kr.)
                 </button>
               </div>
             </div>
@@ -1065,11 +1298,11 @@ export default function App() {
         </button>
 
         <button 
-          className={`tab-item ${activeTab === 'scraper' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scraper')}
+          className={`tab-item ${activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('settings')}
         >
-          <Cpu />
-          <span>Scraper</span>
+          <Settings />
+          <span>Indstillinger</span>
         </button>
       </div>
 
@@ -1105,4 +1338,9 @@ export default function App() {
       )}
     </div>
   );
+
+  // Lydloes scrapings indikation i statusbar
+  function isAutoScrubbing() {
+    return null;
+  }
 }
