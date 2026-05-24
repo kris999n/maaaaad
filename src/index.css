@@ -115,16 +115,24 @@ body {
 
 /* Mobile Viewport Adaption */
 @media (max-width: 480px) {
-  body {
-    background-color: var(--bg-primary);
+  html, body, #root {
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   .app-container {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
     border-radius: 0;
     box-shadow: none;
     padding-top: env(safe-area-inset-top);
+    overflow: hidden !important;
+    position: relative !important;
   }
   .app-notch {
     display: none;
@@ -142,6 +150,8 @@ body {
   }
   .app-screen {
     padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
   }
 }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "maaaaad-v2";
+const CACHE_NAME = "maaaaad-v3";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -41,10 +41,32 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.includes("@vite") || url.pathname.includes("node_modules")) return;
 
+  // 1. Network-First strategy for HTML / navigate requests to guarantee immediate updates on push!
+  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname.endsWith("index.html")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cachedResponse) => {
+            return cachedResponse || caches.match("./index.html");
+          });
+        })
+    );
+    return;
+  }
+
+  // 2. Stale-While-Revalidate for other static assets (js, css, images)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Stale-while-revalidate pattern: fetch fresh in background
         fetch(event.request)
           .then((networkResponse) => {
             if (networkResponse.status === 200) {
