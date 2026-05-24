@@ -2567,6 +2567,15 @@ export default function App() {
           {toastMessage}
         </div>
       )}
+
+      {/* PWA Orientation Lock Overlay */}
+      <div className="orientation-lock-overlay">
+        <div className="orientation-lock-icon">📱</div>
+        <h2>Vend venligst din telefon</h2>
+        <p>
+          maaaaad er optimeret til højformat. Drej venligst din telefon tilbage til lodret visning for den bedste oplevelse.
+        </p>
+      </div>
     </div>
   );
 }

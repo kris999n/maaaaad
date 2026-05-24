@@ -121,11 +121,27 @@ body {
   .app-container {
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     border-radius: 0;
     box-shadow: none;
+    padding-top: env(safe-area-inset-top);
   }
   .app-notch {
     display: none;
+  }
+  .app-status-bar {
+    display: none !important;
+  }
+  .app-home-indicator {
+    display: none !important;
+  }
+  .app-tab-bar {
+    height: calc(56px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    position: fixed !important;
+  }
+  .app-screen {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
   }
 }
 
@@ -2241,6 +2257,61 @@ input:checked + .slider:before {
   color: var(--text-primary) !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Fullscreen PWA Orientation Lock Overlay */
+.orientation-lock-overlay {
+  display: none;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .orientation-lock-overlay {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-primary);
+    background: rgba(252, 250, 240, 0.98);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 99999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 24px;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+  }
+  
+  .orientation-lock-icon {
+    font-size: 56px;
+    margin-bottom: 20px;
+    animation: rotatePhone 2.5s infinite ease-in-out;
+  }
+  
+  .orientation-lock-overlay h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+  
+  .orientation-lock-overlay p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 290px;
+    line-height: 1.55;
+  }
+}
+
+@keyframes rotatePhone {
+  0% { transform: rotate(0deg); }
+  45% { transform: rotate(-90deg); }
+  55% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
 }
 
 
