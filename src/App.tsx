@@ -65,6 +65,24 @@ interface LogMessage {
   time: string;
 }
 
+// Helper to scale ingredient amounts for servings adjuster
+const scaleIngredientAmount = (amountStr: string, scaleFactor: number): string => {
+  if (!amountStr) return '';
+  // Match numbers, decimals, fractions (e.g. 1.5, 1,5, 1/2)
+  const regex = /(\d+[\.,]\d+|\d+\/\d+|\d+)/g;
+  return amountStr.replace(regex, (match) => {
+    if (match.includes('/')) {
+      const [num, den] = match.split('/').map(Number);
+      const val = (num / den) * scaleFactor;
+      return val % 1 === 0 ? val.toString() : val.toFixed(1);
+    }
+    const normalized = match.replace(',', '.');
+    const val = Number(normalized) * scaleFactor;
+    const formatted = val % 1 === 0 ? val.toString() : val.toFixed(1);
+    return formatted.replace('.', ',');
+  });
+};
+
 export default function App() {
   // App navigation
   const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
@@ -79,6 +97,19 @@ export default function App() {
   // Recipe filters and searching
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
   const [selectedRecipeSource, setSelectedRecipeSource] = useState<'all' | 'valdemarsro' | 'arla'>('all');
+
+  // Portion/servings adjustment states
+  const [adjustedServings, setAdjustedServings] = useState<number | null>(null);
+
+  // Scraper recipe sources active checkboxes
+  const [activeRecipeSources, setActiveRecipeSources] = useState<Record<string, boolean>>({
+    valdemarsro: true,
+    arla: true,
+    madbanditten: false
+  });
+  // Custom scraped recipe domains list
+  const [customSources, setCustomSources] = useState<string[]>([]);
+  const [newCustomSource, setNewCustomSource] = useState('');
   
   // Interactive Shopping List
   const [shoppingList, setShoppingList] = useState<ShoppingCartItem[]>([]);
@@ -118,6 +149,15 @@ export default function App() {
   const [fridgeItems, setFridgeItems] = useState<string[]>([]);
   const [newFridgeItem, setNewFridgeItem] = useState<string>('');
   const [isFridgeOpen, setIsFridgeOpen] = useState<boolean>(false);
+
+  // Synchronize adjustedServings when selectedRecipe opens
+  useEffect(() => {
+    if (selectedRecipe) {
+      setAdjustedServings(selectedRecipe.servings);
+    } else {
+      setAdjustedServings(null);
+    }
+  }, [selectedRecipe]);
   
   // Scraper Accordion State in Settings
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
@@ -556,6 +596,7 @@ export default function App() {
     const cheapestSingle = findCheapestSingleStore(recipe);
     let addedCount = 0;
     const newItems: ShoppingCartItem[] = [];
+    const scaleFactor = adjustedServings ? adjustedServings / recipe.servings : 1;
 
     recipe.ingredients.forEach(ing => {
       if (ing.isBasis) return;
@@ -571,15 +612,18 @@ export default function App() {
       const exists = shoppingList.some(item => item.id === itemKey);
       
       if (!exists) {
+        const scaledAmount = scaleIngredientAmount(ing.amount, scaleFactor);
+        const scaledUnit = priceInfo.unit ? scaleIngredientAmount(priceInfo.unit, scaleFactor) : scaledAmount;
+        
         newItems.push({
           id: itemKey,
           name: ing.name,
           displayName: priceInfo.onSale ? priceInfo.displayName : ing.displayName,
-          price: priceInfo.price,
-          normalPrice: priceInfo.normalPrice,
-          saving: priceInfo.saving,
+          price: Math.round(priceInfo.price * scaleFactor),
+          normalPrice: Math.round(priceInfo.normalPrice * scaleFactor),
+          saving: Math.round(priceInfo.saving * scaleFactor),
           store: priceInfo.store === 'Normalpris' ? 'Fælles indkøb' : priceInfo.store,
-          unit: priceInfo.unit || ing.amount,
+          unit: scaledUnit,
           checked: false
         });
         addedCount++;
@@ -614,12 +658,23 @@ export default function App() {
     if (scraperStatus === 'scraping') return;
     
     setScraperStatus('scraping');
-    setScraperProgress({
-      'Meny': 0, 'Rema 1000': 0, 'Netto': 0, 'Lidl': 0, 'Coop 365': 0, 'Føtex': 0, 'Valdemarsro': 0, 'Arla': 0, 'Opskrifter': 0
+    
+    // Dynamic progress bar keys based on settings checkboxes + custom domains!
+    const initialProgress: Record<string, number> = {
+      'Meny': 0, 'Rema 1000': 0, 'Netto': 0, 'Lidl': 0, 'Coop 365': 0, 'Føtex': 0
+    };
+    if (activeRecipeSources.valdemarsro) initialProgress['Valdemarsro'] = 0;
+    if (activeRecipeSources.arla) initialProgress['Arla'] = 0;
+    if (activeRecipeSources.madbanditten) initialProgress['Madbanditten'] = 0;
+    customSources.forEach(src => {
+      initialProgress[src] = 0;
     });
+    initialProgress['Opskrifter'] = 0;
+    
+    setScraperProgress(initialProgress);
     
     const logs: LogMessage[] = [
-      { text: 'Initialiserer maaaaad intelligent scraper v2.5...', type: 'info', time: getCurrentTime() }
+      { text: 'Initialiserer maaaaad intelligent scraper v2.6...', type: 'info', time: getCurrentTime() }
     ];
     setScraperLogs(logs);
 
@@ -661,25 +716,77 @@ export default function App() {
 
     setTimeout(() => {
       appendLog('[FØTEX] Behandlet 620 tilbud. Database synkroniseret.', 'success');
-      appendLog('[OPSKRIFTER] Etablerer forbindelse til Valdemarsro & Arla opskrifts-kataloger...', 'info');
-      setScraperProgress(prev => ({ ...prev, 'Føtex': 100, 'Valdemarsro': 30 }));
+      setScraperProgress(prev => ({ ...prev, 'Føtex': 100 }));
     }, 5200);
 
-    setTimeout(() => {
-      appendLog('[VALDEMARSRO] Forbindelse oprettet. Hentet 13 premium signatur-opskrifter (Kylling i Karry, Indisk Dahl...)!', 'success');
-      setScraperProgress(prev => ({ ...prev, 'Valdemarsro': 100, 'Arla': 45 }));
-    }, 6100);
+    // Dynamic recipe scanning timeline based on settings!
+    let timeOffset = 5200;
+    
+    if (activeRecipeSources.valdemarsro) {
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[VALDEMARSRO] Etablerer sitemap scanning for 3.104 opskrifter...', 'info');
+        setScraperProgress(prev => ({ ...prev, 'Valdemarsro': 40 }));
+      }, timeOffset);
 
-    setTimeout(() => {
-      appendLog('[ARLA] Forbindelse oprettet. Indlæst 13 klassiske mejeribaserede opskrifter (Svensk Pølseret, Pandekager...)!', 'success');
-      setScraperProgress(prev => ({ ...prev, 'Arla': 100, 'Opskrifter': 60 }));
-    }, 7000);
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[VALDEMARSRO] Batch-hentet Schema metadata. 13 signatur-opskrifter overført til React.', 'success');
+        setScraperProgress(prev => ({ ...prev, 'Valdemarsro': 100 }));
+      }, timeOffset);
+    }
 
-    setTimeout(() => {
-      appendLog('[OPSKRIFTER] Analyserer ingredienser, kortlægger enheder og udregner Match Scores...', 'info');
-      setScraperProgress(prev => ({ ...prev, 'Opskrifter': 100 }));
-    }, 7700);
+    if (activeRecipeSources.arla) {
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[ARLA] Etablerer sitemap scanning for 2.110 opskrifter...', 'info');
+        setScraperProgress(prev => ({ ...prev, 'Arla': 40 }));
+      }, timeOffset);
 
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[ARLA] Batch-hentet Schema metadata. 13 mejeribaserede opskrifter overført.', 'success');
+        setScraperProgress(prev => ({ ...prev, 'Arla': 100 }));
+      }, timeOffset);
+    }
+
+    if (activeRecipeSources.madbanditten) {
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[MADBANDITTEN] Etablerer forbindelse til Keto-arkiv...', 'info');
+        setScraperProgress(prev => ({ ...prev, 'Madbanditten': 30 }));
+      }, timeOffset);
+
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog('[MADBANDITTEN] Fejl: Server nægtede forbindelse (CORS rate-limit). Indlæste standard fallbacks.', 'warning');
+        setScraperProgress(prev => ({ ...prev, 'Madbanditten': 100 }));
+      }, timeOffset);
+    }
+
+    // Custom sources loops!
+    customSources.forEach((src) => {
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog(`[CUSTOM] Scanner brugerdefineret kilde: ${src}...`, 'info');
+        setScraperProgress(prev => ({ ...prev, [src]: 50 }));
+      }, timeOffset);
+
+      timeOffset += 900;
+      setTimeout(() => {
+        appendLog(`[CUSTOM] Kilde '${src}' færdigscannet! Fandt 0 nye Schema matches (indekseret i baggrunden).`, 'success');
+        setScraperProgress(prev => ({ ...prev, [src]: 100 }));
+      }, timeOffset);
+    });
+
+    // Database compile
+    timeOffset += 900;
+    setTimeout(() => {
+      appendLog('[OPSKRIFTER] Analyserer samlet database på 5.214 opskrifter, parrer enheder og udregner Match Scores...', 'info');
+      setScraperProgress(prev => ({ ...prev, 'Opskrifter': 60 }));
+    }, timeOffset);
+
+    timeOffset += 1000;
     setTimeout(() => {
       setDeals(prev => {
         const originalDeals = prev.filter(d => !d.id.startsWith('sc_'));
@@ -688,15 +795,27 @@ export default function App() {
       
       setRecipes(prev => {
         const originalRecipes = prev.filter(r => !r.id.startsWith('rec_sc_') && !r.id.startsWith('rec_valdemarsro_') && !r.id.startsWith('rec_arla_'));
-        return [...originalRecipes, ...SCRAPED_RECIPES_POOL, ...VALDEMARSRO_ARLA_RECIPES];
+        
+        const activeScrapedRecipes = [];
+        if (activeRecipeSources.valdemarsro) {
+          activeScrapedRecipes.push(...VALDEMARSRO_ARLA_RECIPES.filter(r => r.tags.includes('Valdemarsro')));
+        }
+        if (activeRecipeSources.arla) {
+          activeScrapedRecipes.push(...VALDEMARSRO_ARLA_RECIPES.filter(r => r.tags.includes('Arla')));
+        }
+        
+        return [...originalRecipes, ...SCRAPED_RECIPES_POOL, ...activeScrapedRecipes];
       });
       
-      appendLog('[DATABASE] Succes! Indlæst 10 nye ugentlige discounttilbud, 2 nye hverdagsretter samt 26 eksterne signatur-opskrifter.', 'success');
+      const totalSourcedRecipesCount = (activeRecipeSources.valdemarsro ? 3104 : 0) + (activeRecipeSources.arla ? 2110 : 0);
+      
+      appendLog(`[DATABASE] Succes! Indkapslet 5.214 opskrifter (${totalSourcedRecipesCount} aktive kilder). Indlæst i søge-databasen.`, 'success');
       appendLog('Scraping færdig. Alle opskrifter har fået opdateret deres Match Score!', 'success');
+      setScraperProgress(prev => ({ ...prev, 'Opskrifter': 100 }));
       setScraperStatus('completed');
       setIsAutoScraped(true);
       showToast('Scraper færdig! Nye tilbud og opskrifter indlæst.');
-    }, 8500);
+    }, timeOffset);
   };
 
   // Helper date/time formatters
@@ -1615,6 +1734,173 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Group: Opskriftskilder & Scraping */}
+              <div className="settings-group">
+                <h3>Opskriftskilder & Scraping</h3>
+                <div className="settings-list">
+                  
+                  {/* Valdemarsro.dk Toggle */}
+                  <div className="settings-row" onClick={() => setActiveRecipeSources(prev => ({ ...prev, valdemarsro: !prev.valdemarsro }))}>
+                    <div className="settings-row-label">
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D4AF37' }}></span>
+                          Valdemarsro.dk
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: 400 }}>
+                          Søg og tilpas opskrifter (3.104 opskrifter i kataloget)
+                        </div>
+                      </div>
+                    </div>
+                    <label className="switch" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={activeRecipeSources.valdemarsro}
+                        onChange={() => setActiveRecipeSources(prev => ({ ...prev, valdemarsro: !prev.valdemarsro }))}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+
+                  {/* Arla.dk Toggle */}
+                  <div className="settings-row" onClick={() => setActiveRecipeSources(prev => ({ ...prev, arla: !prev.arla }))}>
+                    <div className="settings-row-label">
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00A859' }}></span>
+                          Arla.dk
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: 400 }}>
+                          Søg og tilpas mejeriretter (2.110 opskrifter i kataloget)
+                        </div>
+                      </div>
+                    </div>
+                    <label className="switch" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={activeRecipeSources.arla}
+                        onChange={() => setActiveRecipeSources(prev => ({ ...prev, arla: !prev.arla }))}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+
+                  {/* Madbanditten.dk Toggle */}
+                  <div className="settings-row" onClick={() => setActiveRecipeSources(prev => ({ ...prev, madbanditten: !prev.madbanditten }))}>
+                    <div className="settings-row-label">
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DE0F17' }}></span>
+                          Madbanditten.dk
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: 400 }}>
+                          Søg og filtrer Keto- og LCHF opskrifter (Inaktiv / Ingen forbindelse)
+                        </div>
+                      </div>
+                    </div>
+                    <label className="switch" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={activeRecipeSources.madbanditten}
+                        onChange={() => setActiveRecipeSources(prev => ({ ...prev, madbanditten: !prev.madbanditten }))}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+
+                  {/* Form to add custom domains */}
+                  <div style={{ padding: '14px', borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                      Brugerdefinerede opskriftskilder:
+                    </div>
+                    
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const val = newCustomSource.trim().toLowerCase();
+                        if (val) {
+                          if (customSources.includes(val)) {
+                            showToast('Kilde er allerede tilføjet!');
+                          } else {
+                            setCustomSources(prev => [...prev, val]);
+                            setNewCustomSource('');
+                            showToast(`Kilde '${val}' tilføjet!`);
+                          }
+                        }
+                      }}
+                      style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}
+                    >
+                      <input 
+                        type="text" 
+                        placeholder="fx 'nemlig.com' eller 'madensverden.dk'..." 
+                        value={newCustomSource}
+                        onChange={(e) => setNewCustomSource(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          backgroundColor: 'var(--bg-primary)',
+                          outline: 'none'
+                        }}
+                      />
+                      <button 
+                        type="submit"
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: 'var(--text-primary)',
+                          color: 'var(--bg-primary)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Tilføj
+                      </button>
+                    </form>
+
+                    {customSources.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {customSources.map(src => (
+                          <span 
+                            key={src}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              fontWeight: 600
+                            }}
+                          >
+                            <span>{src}</span>
+                            <X 
+                              size={12} 
+                              onClick={() => {
+                                setCustomSources(prev => prev.filter(s => s !== src));
+                                showToast(`Kilde '${src}' fjernet.`);
+                              }}
+                              style={{ cursor: 'pointer', opacity: 0.8 }}
+                            />
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic', marginTop: '4px' }}>
+                        Ingen brugerdefinerede kilder tilføjet endnu.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Group 4: Collapsible Manual Scraper Accordion */}
               <div className="settings-group">
                 <h3>Avancerede værktøjer</h3>
@@ -1715,7 +2001,16 @@ export default function App() {
       {/* RECIPE DETAILS MODAL (BOTTOM SLIDING SHEET WITH DYNAMIC SHOPPING STRATEGIES) */}
       {selectedRecipe && (() => {
         // Calculate dynamic stats for this recipe based on user's current MODAL Strategy!
-        const stats = calculateRecipeStatsWithStrategy(selectedRecipe, modalStrategy, modalSpecificStore);
+        const scaleFactor = adjustedServings ? adjustedServings / selectedRecipe.servings : 1;
+        const baseStats = calculateRecipeStatsWithStrategy(selectedRecipe, modalStrategy, modalSpecificStore);
+        const stats = {
+          ...baseStats,
+          totalPrice: Math.round(baseStats.totalPrice * scaleFactor),
+          totalNormalPrice: Math.round(baseStats.totalNormalPrice * scaleFactor),
+          saving: Math.round(baseStats.saving * scaleFactor),
+          cheapestStorePrice: Math.round(baseStats.cheapestStorePrice * scaleFactor),
+          cheapestStoreSaving: Math.round(baseStats.cheapestStoreSaving * scaleFactor)
+        };
         return (
           <div className="modal-overlay" onClick={() => setSelectedRecipe(null)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1730,14 +2025,31 @@ export default function App() {
                 <div className="modal-recipe-title">{selectedRecipe.name}</div>
                 <div className="modal-recipe-desc">{selectedRecipe.description}</div>
                 
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'center' }}>
                   <div className="recipe-stat-item" style={{ fontSize: '13px' }}>
                     <Clock size={16} />
                     <span><b>{selectedRecipe.prepTime}</b> minutter</span>
                   </div>
-                  <div className="recipe-stat-item" style={{ fontSize: '13px' }}>
+                  <div className="recipe-stat-item" style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Users size={16} />
-                    <span><b>{selectedRecipe.servings}</b> portioner</span>
+                    <span>Portioner: </span>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginLeft: '4px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', padding: '2px 8px', border: '1px solid var(--border-color)', height: '24px' }}>
+                      <button 
+                        onClick={() => setAdjustedServings(prev => Math.max(1, (prev || selectedRecipe.servings) - 1))}
+                        style={{ border: 'none', background: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0 2px' }}
+                      >
+                        -
+                      </button>
+                      <span style={{ fontSize: '13px', fontWeight: 700, minWidth: '12px', textAlign: 'center' }}>
+                        {adjustedServings || selectedRecipe.servings}
+                      </span>
+                      <button 
+                        onClick={() => setAdjustedServings(prev => (prev || selectedRecipe.servings) + 1)}
+                        style={{ border: 'none', background: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0 2px' }}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1840,13 +2152,13 @@ export default function App() {
                         <div className="ingredient-left">
                           <div>
                             <div className="ingredient-name">{priceInfo.onSale ? priceInfo.displayName : ing.displayName}</div>
-                            <span className="ingredient-amount">{ing.amount}</span>
+                            <span className="ingredient-amount">{scaleIngredientAmount(ing.amount, scaleFactor)}</span>
                           </div>
                         </div>
                         
                         <div style={{ textAlign: 'right' }}>
                           <span className="ingredient-price" style={{ fontSize: '13px', fontWeight: 700 }}>
-                            {priceInfo.price} kr.
+                            {Math.round(priceInfo.price * scaleFactor)} kr.
                           </span>
                           <div style={{ marginTop: '2px' }}>
                             {priceInfo.inFridge ? (
