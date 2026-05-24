@@ -28,6 +28,7 @@ import {
   SCRAPED_DEALS_POOL, 
   SCRAPED_RECIPES_POOL 
 } from './data/mockData';
+import { LIVE_DEALS } from './data/liveDeals';
 
 // Shopping Cart Item structure
 interface ShoppingCartItem {
@@ -54,7 +55,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'deals' | 'recipes' | 'shopping' | 'settings'>('home');
   
   // Database States (updated by Scraper)
-  const [deals, setDeals] = useState<Deal[]>(INITIAL_DEALS);
+  const [deals, setDeals] = useState<Deal[]>(LIVE_DEALS.length > 0 ? LIVE_DEALS : INITIAL_DEALS);
   const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
   
   // Interactive Shopping List
