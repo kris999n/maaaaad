@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Home, 
   Tag, 
@@ -150,6 +150,7 @@ export default function App() {
   // Phase 5: Sorting & Zero Waste States
   const [dealsSortBy, setDealsSortBy] = useState<'saving' | 'price' | 'name'>('saving');
   const [recipesSortBy, setRecipesSortBy] = useState<'match' | 'price' | 'time' | 'health' | 'saving'>('match');
+  const [recipesVisibleCount, setRecipesVisibleCount] = useState(24);
   const [fridgeItems, setFridgeItems] = useState<string[]>([]);
   const [newFridgeItem, setNewFridgeItem] = useState<string>('');
   const [isFridgeOpen, setIsFridgeOpen] = useState<boolean>(false);
@@ -166,6 +167,11 @@ export default function App() {
       setCompletedSteps({});
     }
   }, [selectedRecipe]);
+
+  // Reset pagination when search parameters change
+  useEffect(() => {
+    setRecipesVisibleCount(24);
+  }, [recipeSearchQuery, selectedRecipeSource, recipesSortBy]);
   
   // Scraper Accordion State in Settings
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
@@ -861,33 +867,47 @@ export default function App() {
     return 0;
   });
 
-  // Filter recipes based on recipeSearchQuery and selectedRecipeSource
-  const filteredRecipes = recipes.filter(recipe => {
-    const query = recipeSearchQuery.trim().toLowerCase();
-    const matchesSearch = query === '' || 
-                          recipe.name.toLowerCase().includes(query) || 
-                          recipe.description.toLowerCase().includes(query) ||
-                          recipe.tags.some(t => t.toLowerCase().includes(query));
-                          
-    const matchesSource = selectedRecipeSource === 'all' || 
-                          (selectedRecipeSource === 'valdemarsro' && recipe.tags.some(t => t.toLowerCase() === 'valdemarsro')) ||
-                          (selectedRecipeSource === 'arla' && recipe.tags.some(t => t.toLowerCase() === 'arla'));
-                          
-    return matchesSearch && matchesSource;
-  });
+  // 1. Memoize recipe pricing stats to eliminate O(N) recalculations on search/filter renders!
+  const recipesWithStats = useMemo(() => {
+    return recipes.map((recipe: Recipe) => ({
+      ...recipe,
+      stats: calculateRecipeStats(recipe)
+    }));
+  }, [recipes, deals, activeStores]);
 
-  // Sort recipes by chosen sorting method
-  const sortedRecipes = [...filteredRecipes].map(recipe => {
-    const stats = calculateRecipeStats(recipe);
-    return { ...recipe, stats };
-  }).sort((a, b) => {
-    if (recipesSortBy === 'price') return a.stats.totalPrice - b.stats.totalPrice;
-    if (recipesSortBy === 'time') return a.prepTime - b.prepTime;
-    if (recipesSortBy === 'health') return (b.healthScore || 5) - (a.healthScore || 5);
-    if (recipesSortBy === 'match') return b.stats.matchScore - a.stats.matchScore;
-    if (recipesSortBy === 'saving') return b.stats.saving - a.stats.saving;
-    return 0;
-  });
+  // 2. Filter recipes based on recipeSearchQuery and selectedRecipeSource
+  const filteredRecipes = useMemo(() => {
+    const query = recipeSearchQuery.trim().toLowerCase();
+    return recipesWithStats.filter((recipe: any) => {
+      const matchesSearch = query === '' || 
+                            recipe.name.toLowerCase().includes(query) || 
+                            recipe.description.toLowerCase().includes(query) ||
+                            recipe.tags.some((t: string) => t.toLowerCase().includes(query));
+                            
+      const matchesSource = selectedRecipeSource === 'all' || 
+                            (selectedRecipeSource === 'valdemarsro' && recipe.tags.some((t: string) => t.toLowerCase() === 'valdemarsro')) ||
+                            (selectedRecipeSource === 'arla' && recipe.tags.some((t: string) => t.toLowerCase() === 'arla'));
+                            
+      return matchesSearch && matchesSource;
+    });
+  }, [recipesWithStats, recipeSearchQuery, selectedRecipeSource]);
+
+  // 3. Sort recipes by chosen sorting method
+  const sortedRecipes = useMemo(() => {
+    return [...filteredRecipes].sort((a: any, b: any) => {
+      if (recipesSortBy === 'price') return a.stats.totalPrice - b.stats.totalPrice;
+      if (recipesSortBy === 'time') return a.prepTime - b.prepTime;
+      if (recipesSortBy === 'health') return (b.healthScore || 5) - (a.healthScore || 5);
+      if (recipesSortBy === 'match') return b.stats.matchScore - a.stats.matchScore;
+      if (recipesSortBy === 'saving') return b.stats.saving - a.stats.saving;
+      return 0;
+    });
+  }, [filteredRecipes, recipesSortBy]);
+
+  // 4. Lazy loader slice: slice the sorted array to limit active DOM nodes initially!
+  const displayedRecipes = useMemo(() => {
+    return sortedRecipes.slice(0, recipesVisibleCount);
+  }, [sortedRecipes, recipesVisibleCount]);
 
   return (
     <div className="app-container">
@@ -1413,7 +1433,7 @@ export default function App() {
             </div>
 
             <div className={`recipes-grid view-${recipesViewMode}`}>
-              {sortedRecipes.map(recipe => {
+              {displayedRecipes.map((recipe: any) => {
                 let badgeClass = 'badge-gray';
                 let scoreText = 'Ingen kup';
                 
@@ -1452,7 +1472,7 @@ export default function App() {
                     </div>
                     <div className="recipe-card-content">
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px', alignItems: 'center' }}>
-                        {recipe.tags.some(t => t.toLowerCase() === 'valdemarsro') && (
+                        {recipe.tags.some((t: string) => t.toLowerCase() === 'valdemarsro') && (
                           <span className="source-badge valdemarsro" style={{ 
                             fontSize: '8px', 
                             fontWeight: 800, 
@@ -1465,7 +1485,7 @@ export default function App() {
                             letterSpacing: '0.5px'
                           }}>VALDEMARSRO</span>
                         )}
-                        {recipe.tags.some(t => t.toLowerCase() === 'arla') && (
+                        {recipe.tags.some((t: string) => t.toLowerCase() === 'arla') && (
                           <span className="source-badge arla" style={{ 
                             fontSize: '8px', 
                             fontWeight: 800, 
@@ -1474,11 +1494,11 @@ export default function App() {
                             padding: '1px 5px', 
                             borderRadius: '4px',
                             backgroundColor: '#EBF7F0',
-                            marginRight: '4px',
+                             marginRight: '4px',
                             letterSpacing: '0.5px'
                           }}>ARLA</span>
                         )}
-                        {recipe.tags.filter(t => t !== 'Valdemarsro' && t !== 'Arla' && t !== 'Scrapet').map(t => (
+                        {recipe.tags.filter((t: string) => t !== 'Valdemarsro' && t !== 'Arla' && t !== 'Scrapet').map((t: string) => (
                           <span key={t} style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-tertiary)', fontWeight: 600 }}>{t} •</span>
                         ))}
                       </div>
@@ -1506,6 +1526,28 @@ export default function App() {
                 );
               })}
             </div>
+
+            {recipesVisibleCount < sortedRecipes.length && (
+              <div className="recipes-load-more" style={{
+                textAlign: 'center',
+                margin: '24px 0 32px 0',
+                padding: '16px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: '16px',
+                border: '1px solid var(--border-color)'
+              }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '12px' }}>
+                  Viser {Math.min(recipesVisibleCount, sortedRecipes.length)} af {sortedRecipes.length} opskrifter
+                </div>
+                <button 
+                  className="btn-primary" 
+                  onClick={() => setRecipesVisibleCount(prev => prev + 24)}
+                  style={{ display: 'inline-flex', width: 'auto', padding: '10px 24px', borderRadius: '20px', margin: '0 auto', fontSize: '13px', fontWeight: 700 }}
+                >
+                  <ChevronDown size={16} /> Vis flere opskrifter
+                </button>
+              </div>
+            )}
           </div>
         )}
 
