@@ -32,6 +32,7 @@ import {
   SCRAPED_RECIPES_POOL 
 } from './data/mockData';
 import { LIVE_DEALS } from './data/liveDeals';
+import { VALDEMARSRO_ARLA_RECIPES } from './data/scrapedRecipes';
 
 // Shopping Cart Item structure
 interface ShoppingCartItem {
@@ -70,7 +71,14 @@ export default function App() {
   
   // Database States (updated by Scraper)
   const [deals, setDeals] = useState<Deal[]>(LIVE_DEALS.length > 0 ? LIVE_DEALS : INITIAL_DEALS);
-  const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => {
+    // Return INITIAL_RECIPES and VALDEMARSRO_ARLA_RECIPES combined
+    return [...INITIAL_RECIPES, ...VALDEMARSRO_ARLA_RECIPES];
+  });
+  
+  // Recipe filters and searching
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
+  const [selectedRecipeSource, setSelectedRecipeSource] = useState<'all' | 'valdemarsro' | 'arla'>('all');
   
   // Interactive Shopping List
   const [shoppingList, setShoppingList] = useState<ShoppingCartItem[]>([]);
@@ -607,11 +615,11 @@ export default function App() {
     
     setScraperStatus('scraping');
     setScraperProgress({
-      'Meny': 0, 'Rema 1000': 0, 'Netto': 0, 'Lidl': 0, 'Coop 365': 0, 'Føtex': 0, 'Opskrifter': 0
+      'Meny': 0, 'Rema 1000': 0, 'Netto': 0, 'Lidl': 0, 'Coop 365': 0, 'Føtex': 0, 'Valdemarsro': 0, 'Arla': 0, 'Opskrifter': 0
     });
     
     const logs: LogMessage[] = [
-      { text: 'Initialiserer maaaaad intelligent scraper v2.4...', type: 'info', time: getCurrentTime() }
+      { text: 'Initialiserer maaaaad intelligent scraper v2.5...', type: 'info', time: getCurrentTime() }
     ];
     setScraperLogs(logs);
 
@@ -641,26 +649,36 @@ export default function App() {
     }, 3000);
 
     setTimeout(() => {
-      appendLog('[NETTO] ^& [COOP 365] Scraper ugentlige discounttilbud...', 'info');
+      appendLog('[NETTO] & [COOP 365] Scraper ugentlige discounttilbud...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Netto': 85, 'Coop 365': 70 }));
     }, 3600);
 
     setTimeout(() => {
       appendLog('[NETTO] Fandt fantastisk tilbud på bacon (Spar 50%) og smør!', 'success');
-      appendLog('[LIDL] ^& [FØTEX] Behandler fisk- og grønttilbud...', 'info');
+      appendLog('[LIDL] & [FØTEX] Behandler fisk- og grønttilbud...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Netto': 100, 'Coop 365': 100, 'Lidl': 100, 'Føtex': 80 }));
     }, 4400);
 
     setTimeout(() => {
       appendLog('[FØTEX] Behandlet 620 tilbud. Database synkroniseret.', 'success');
-      appendLog('[OPSKRIFTER] Scanner Valdemarsro ^& Madbanditten for nye madplaner...', 'info');
-      setScraperProgress(prev => ({ ...prev, 'Føtex': 100, 'Opskrifter': 50 }));
+      appendLog('[OPSKRIFTER] Etablerer forbindelse til Valdemarsro & Arla opskrifts-kataloger...', 'info');
+      setScraperProgress(prev => ({ ...prev, 'Føtex': 100, 'Valdemarsro': 30 }));
     }, 5200);
 
     setTimeout(() => {
-      appendLog('[OPSKRIFTER] Hentet 2 nye dynamiske opskrifter: Wok med Kylling, Smørrebrød med Laks.', 'success');
+      appendLog('[VALDEMARSRO] Forbindelse oprettet. Hentet 13 premium signatur-opskrifter (Kylling i Karry, Indisk Dahl...)!', 'success');
+      setScraperProgress(prev => ({ ...prev, 'Valdemarsro': 100, 'Arla': 45 }));
+    }, 6100);
+
+    setTimeout(() => {
+      appendLog('[ARLA] Forbindelse oprettet. Indlæst 13 klassiske mejeribaserede opskrifter (Svensk Pølseret, Pandekager...)!', 'success');
+      setScraperProgress(prev => ({ ...prev, 'Arla': 100, 'Opskrifter': 60 }));
+    }, 7000);
+
+    setTimeout(() => {
+      appendLog('[OPSKRIFTER] Analyserer ingredienser, kortlægger enheder og udregner Match Scores...', 'info');
       setScraperProgress(prev => ({ ...prev, 'Opskrifter': 100 }));
-    }, 5800);
+    }, 7700);
 
     setTimeout(() => {
       setDeals(prev => {
@@ -669,16 +687,16 @@ export default function App() {
       });
       
       setRecipes(prev => {
-        const originalRecipes = prev.filter(r => !r.id.startsWith('rec_sc_'));
-        return [...originalRecipes, ...SCRAPED_RECIPES_POOL];
+        const originalRecipes = prev.filter(r => !r.id.startsWith('rec_sc_') && !r.id.startsWith('rec_valdemarsro_') && !r.id.startsWith('rec_arla_'));
+        return [...originalRecipes, ...SCRAPED_RECIPES_POOL, ...VALDEMARSRO_ARLA_RECIPES];
       });
       
-      appendLog('[DATABASE] Succes! Indlæst 10 nye ugentlige megakup og 2 nye opskrifter.', 'success');
+      appendLog('[DATABASE] Succes! Indlæst 10 nye ugentlige discounttilbud, 2 nye hverdagsretter samt 26 eksterne signatur-opskrifter.', 'success');
       appendLog('Scraping færdig. Alle opskrifter har fået opdateret deres Match Score!', 'success');
       setScraperStatus('completed');
       setIsAutoScraped(true);
       showToast('Scraper færdig! Nye tilbud og opskrifter indlæst.');
-    }, 6500);
+    }, 8500);
   };
 
   // Helper date/time formatters
@@ -716,8 +734,23 @@ export default function App() {
     return 0;
   });
 
+  // Filter recipes based on recipeSearchQuery and selectedRecipeSource
+  const filteredRecipes = recipes.filter(recipe => {
+    const query = recipeSearchQuery.trim().toLowerCase();
+    const matchesSearch = query === '' || 
+                          recipe.name.toLowerCase().includes(query) || 
+                          recipe.description.toLowerCase().includes(query) ||
+                          recipe.tags.some(t => t.toLowerCase().includes(query));
+                          
+    const matchesSource = selectedRecipeSource === 'all' || 
+                          (selectedRecipeSource === 'valdemarsro' && recipe.tags.some(t => t.toLowerCase() === 'valdemarsro')) ||
+                          (selectedRecipeSource === 'arla' && recipe.tags.some(t => t.toLowerCase() === 'arla'));
+                          
+    return matchesSearch && matchesSource;
+  });
+
   // Sort recipes by chosen sorting method
-  const sortedRecipes = [...recipes].map(recipe => {
+  const sortedRecipes = [...filteredRecipes].map(recipe => {
     const stats = calculateRecipeStats(recipe);
     return { ...recipe, stats };
   }).sort((a, b) => {
@@ -1011,6 +1044,76 @@ export default function App() {
               <h1>Spar med Retter</h1>
             </div>
 
+            {/* Elegant Recipe Search Bar */}
+            <div className="search-bar-container" style={{ marginBottom: '12px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <Search size={16} className="search-icon" style={{ position: 'absolute', left: '12px', color: 'var(--text-tertiary)' }} />
+              <input 
+                type="text" 
+                placeholder="Søg i alle opskrifter..." 
+                value={recipeSearchQuery}
+                onChange={(e) => setRecipeSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 36px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  outline: 'none'
+                }}
+              />
+              {recipeSearchQuery && (
+                <X 
+                  size={16} 
+                  onClick={() => setRecipeSearchQuery('')} 
+                  style={{ cursor: 'pointer', color: 'var(--text-tertiary)', position: 'absolute', right: '12px' }} 
+                />
+              )}
+            </div>
+
+            {/* Horizontal Source Selector */}
+            <div className="horizontal-selector" style={{ marginBottom: '16px', display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+              <div 
+                className={`selector-pill ${selectedRecipeSource === 'all' ? 'active' : ''}`}
+                onClick={() => setSelectedRecipeSource('all')}
+                style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Alle opskrifter
+              </div>
+              <div 
+                className={`selector-pill ${selectedRecipeSource === 'valdemarsro' ? 'active' : ''}`}
+                onClick={() => setSelectedRecipeSource('valdemarsro')}
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '11px', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span className="source-dot valdemarsro" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D4AF37', display: 'inline-block' }}></span>
+                Valdemarsro
+              </div>
+              <div 
+                className={`selector-pill ${selectedRecipeSource === 'arla' ? 'active' : ''}`}
+                onClick={() => setSelectedRecipeSource('arla')}
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '11px', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span className="source-dot arla" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00A859', display: 'inline-block' }}></span>
+                Arla
+              </div>
+            </div>
+
             <div className="highlight-banner" style={{ padding: '12px 14px', marginBottom: '16px' }}>
               <Info size={16} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
               <p style={{ fontSize: '11.5px', color: '#3b5a4a', lineHeight: 1.4 }}>
@@ -1214,8 +1317,34 @@ export default function App() {
                       </div>
                     </div>
                     <div className="recipe-card-content">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '2px' }}>
-                        {recipe.tags.map(t => (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px', alignItems: 'center' }}>
+                        {recipe.tags.some(t => t.toLowerCase() === 'valdemarsro') && (
+                          <span className="source-badge valdemarsro" style={{ 
+                            fontSize: '8px', 
+                            fontWeight: 800, 
+                            color: '#bfa02c', 
+                            border: '1px solid #d4af37', 
+                            padding: '1px 5px', 
+                            borderRadius: '4px',
+                            backgroundColor: '#FCFAF0',
+                            marginRight: '4px',
+                            letterSpacing: '0.5px'
+                          }}>VALDEMARSRO</span>
+                        )}
+                        {recipe.tags.some(t => t.toLowerCase() === 'arla') && (
+                          <span className="source-badge arla" style={{ 
+                            fontSize: '8px', 
+                            fontWeight: 800, 
+                            color: '#008a47', 
+                            border: '1px solid #00a859', 
+                            padding: '1px 5px', 
+                            borderRadius: '4px',
+                            backgroundColor: '#EBF7F0',
+                            marginRight: '4px',
+                            letterSpacing: '0.5px'
+                          }}>ARLA</span>
+                        )}
+                        {recipe.tags.filter(t => t !== 'Valdemarsro' && t !== 'Arla' && t !== 'Scrapet').map(t => (
                           <span key={t} style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-tertiary)', fontWeight: 600 }}>{t} •</span>
                         ))}
                       </div>
