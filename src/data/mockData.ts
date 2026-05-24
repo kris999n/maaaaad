@@ -30,6 +30,8 @@ export interface Recipe {
   instructions: string[];
   tags: string[];
   healthScore?: number;
+  holdbarhed?: string;
+  kanFryses?: string;
   tips?: {
     healthier: string;
     cheaper: string;

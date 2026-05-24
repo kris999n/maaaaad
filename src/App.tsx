@@ -20,7 +20,9 @@ import {
   ChevronUp,
   List,
   Grid,
-  Layout
+  Layout,
+  Calendar,
+  Heart
 } from 'lucide-react';
 import type { Deal, Recipe } from './data/mockData';
 import { 
@@ -129,6 +131,8 @@ export default function App() {
 
   // UI States
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [checkedIngredients, setCheckedIngredients] = useState<Record<number, boolean>>({});
+  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState('Alle');
   const [selectedCategory, setSelectedCategory] = useState('Alle');
@@ -145,7 +149,7 @@ export default function App() {
   
   // Phase 5: Sorting & Zero Waste States
   const [dealsSortBy, setDealsSortBy] = useState<'saving' | 'price' | 'name'>('saving');
-  const [recipesSortBy, setRecipesSortBy] = useState<'match' | 'price' | 'time' | 'health'>('match');
+  const [recipesSortBy, setRecipesSortBy] = useState<'match' | 'price' | 'time' | 'health' | 'saving'>('match');
   const [fridgeItems, setFridgeItems] = useState<string[]>([]);
   const [newFridgeItem, setNewFridgeItem] = useState<string>('');
   const [isFridgeOpen, setIsFridgeOpen] = useState<boolean>(false);
@@ -154,8 +158,12 @@ export default function App() {
   useEffect(() => {
     if (selectedRecipe) {
       setAdjustedServings(selectedRecipe.servings);
+      setCheckedIngredients({});
+      setCompletedSteps({});
     } else {
       setAdjustedServings(null);
+      setCheckedIngredients({});
+      setCompletedSteps({});
     }
   }, [selectedRecipe]);
   
@@ -877,6 +885,7 @@ export default function App() {
     if (recipesSortBy === 'time') return a.prepTime - b.prepTime;
     if (recipesSortBy === 'health') return (b.healthScore || 5) - (a.healthScore || 5);
     if (recipesSortBy === 'match') return b.stats.matchScore - a.stats.matchScore;
+    if (recipesSortBy === 'saving') return b.stats.saving - a.stats.saving;
     return 0;
   });
 
@@ -1370,6 +1379,7 @@ export default function App() {
                   <option value="price">Sorter: Laveste pris</option>
                   <option value="time">Sorter: Korteste tid</option>
                   <option value="health">Sorter: Sundeste</option>
+                  <option value="saving">Sorter: Penge sparet</option>
                 </select>
 
                 {/* Segmented View Switcher */}
@@ -1434,6 +1444,11 @@ export default function App() {
                           {recipe.stats.matchScore}% Match
                         </span>
                       </div>
+                      {recipe.stats.saving > 0 && (
+                        <div className="recipe-savings-badge">
+                          Spar {recipe.stats.saving} kr.
+                        </div>
+                      )}
                     </div>
                     <div className="recipe-card-content">
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px', alignItems: 'center' }}>
@@ -2014,48 +2029,92 @@ export default function App() {
         return (
           <div className="modal-overlay" onClick={() => setSelectedRecipe(null)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              
+              {/* Drag indicator pill and floating close button */}
+              <div className="modal-drag-pill"></div>
+              <button className="modal-close-btn" onClick={() => setSelectedRecipe(null)} aria-label="Luk">
+                <X size={20} />
+              </button>
+
               <div className="modal-header">
                 <img src={selectedRecipe.image} alt={selectedRecipe.name} />
-                <button className="modal-close-btn" onClick={() => setSelectedRecipe(null)}>
-                  <X size={18} />
-                </button>
               </div>
 
               <div className="modal-body">
-                <div className="modal-recipe-title">{selectedRecipe.name}</div>
-                <div className="modal-recipe-desc">{selectedRecipe.description}</div>
-                
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'center' }}>
-                  <div className="recipe-stat-item" style={{ fontSize: '13px' }}>
-                    <Clock size={16} />
-                    <span><b>{selectedRecipe.prepTime}</b> minutter</span>
+                {/* Brand badges & Recipe title row */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                    {selectedRecipe.tags.some(t => t.toLowerCase() === 'valdemarsro') && (
+                      <span className="source-badge valdemarsro-large">
+                        Valdemarsro opskrift
+                      </span>
+                    )}
+                    {selectedRecipe.tags.some(t => t.toLowerCase() === 'arla') && (
+                      <span className="source-badge arla-large">
+                        Arla opskrift
+                      </span>
+                    )}
                   </div>
-                  <div className="recipe-stat-item" style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Users size={16} />
-                    <span>Portioner: </span>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginLeft: '4px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', padding: '2px 8px', border: '1px solid var(--border-color)', height: '24px' }}>
+                  <div className="modal-recipe-title">{selectedRecipe.name}</div>
+                  <div className="modal-recipe-desc">{selectedRecipe.description}</div>
+                </div>
+
+                {/* Premium iOS Status Grid Dashboard */}
+                <div className="recipe-stats-dashboard">
+                  <div className="stat-card">
+                    <Clock size={16} className="stat-icon time-icon" />
+                    <span className="stat-label">Tid i alt</span>
+                    <span className="stat-value">{selectedRecipe.prepTime} min.</span>
+                  </div>
+                  
+                  <div className="stat-card servings-card">
+                    <Users size={16} className="stat-icon portions-icon" />
+                    <span className="stat-label">Portioner</span>
+                    <div className="servings-counter">
                       <button 
-                        onClick={() => setAdjustedServings(prev => Math.max(1, (prev || selectedRecipe.servings) - 1))}
-                        style={{ border: 'none', background: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0 2px' }}
+                        className="counter-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAdjustedServings(prev => Math.max(1, (prev || selectedRecipe.servings) - 1));
+                        }}
                       >
                         -
                       </button>
-                      <span style={{ fontSize: '13px', fontWeight: 700, minWidth: '12px', textAlign: 'center' }}>
-                        {adjustedServings || selectedRecipe.servings}
-                      </span>
+                      <span className="counter-val">{adjustedServings || selectedRecipe.servings}</span>
                       <button 
-                        onClick={() => setAdjustedServings(prev => (prev || selectedRecipe.servings) + 1)}
-                        style={{ border: 'none', background: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0 2px' }}
+                        className="counter-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAdjustedServings(prev => (prev || selectedRecipe.servings) + 1);
+                        }}
                       >
                         +
                       </button>
                     </div>
                   </div>
+
+                  <div className="stat-card">
+                    <Heart size={16} className="stat-icon health-icon" />
+                    <span className="stat-label">Sundhed</span>
+                    <span className="stat-value">{selectedRecipe.healthScore || 7}/10</span>
+                  </div>
+
+                  <div className="stat-card">
+                    <Calendar size={16} className="stat-icon storage-icon" />
+                    <span className="stat-label">Holdbarhed</span>
+                    <span className="stat-value">{selectedRecipe.holdbarhed || '3 dage'}</span>
+                  </div>
+
+                  <div className="stat-card">
+                    <Sparkles size={16} className="stat-icon freeze-icon" />
+                    <span className="stat-label">Kan fryses</span>
+                    <span className="stat-value">{selectedRecipe.kanFryses || 'Ja'}</span>
+                  </div>
                 </div>
 
-                {/* Phase 3 Segmented Control for Strategy Selection */}
+                {/* Segmented Control for Strategy Selection */}
                 <div className="modal-section-title" style={{ borderBottom: 'none', marginBottom: '8px' }}>
-                  Beregning ^& Indkøb Strategy
+                  Beregning & Indkøb Strategy
                 </div>
                 <div className="strategy-selector">
                   <button 
@@ -2121,16 +2180,32 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Ingredients with real-time portion scaling and checkoff checklist */}
                 <div className="modal-section-title">
                   Ingredienser i denne uge ({stats.totalPrice} kr.)
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', fontStyle: 'italic' }}>
+                  Tryk på en ingrediens for at strege den ud (fx hvis du har den allerede)
                 </div>
 
                 <div className="modal-ingredients-list">
                   {selectedRecipe.ingredients.map((ing, idx) => {
+                    const isChecked = !!checkedIngredients[idx];
+                    
                     if (ing.isBasis) {
                       return (
-                        <div key={idx} className="ingredient-item">
+                        <div 
+                          key={idx} 
+                          className={`ingredient-item basis ${isChecked ? 'checked' : ''}`}
+                          onClick={() => setCheckedIngredients(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <div className="ingredient-left">
+                            <div className="ingredient-checkbox-wrapper">
+                              <div className={`ingredient-checkbox ${isChecked ? 'active' : ''}`}>
+                                {isChecked && <Check size={10} strokeWidth={3} />}
+                              </div>
+                            </div>
                             <span className="ingredient-name basis">{ing.displayName}</span>
                           </div>
                           <span className="ingredient-amount">Pantry / basis</span>
@@ -2148,15 +2223,25 @@ export default function App() {
                     const storeStyle = SUPERMARKETS.find(s => s.name === priceInfo.store);
 
                     return (
-                      <div key={idx} className="ingredient-item">
+                      <div 
+                        key={idx} 
+                        className={`ingredient-item ${isChecked ? 'checked' : ''}`}
+                        onClick={() => setCheckedIngredients(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="ingredient-left">
+                          <div className="ingredient-checkbox-wrapper">
+                            <div className={`ingredient-checkbox ${isChecked ? 'active' : ''}`}>
+                              {isChecked && <Check size={10} strokeWidth={3} />}
+                            </div>
+                          </div>
                           <div>
                             <div className="ingredient-name">{priceInfo.onSale ? priceInfo.displayName : ing.displayName}</div>
                             <span className="ingredient-amount">{scaleIngredientAmount(ing.amount, scaleFactor)}</span>
                           </div>
                         </div>
                         
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <span className="ingredient-price" style={{ fontSize: '13px', fontWeight: 700 }}>
                             {Math.round(priceInfo.price * scaleFactor)} kr.
                           </span>
@@ -2204,66 +2289,68 @@ export default function App() {
 
                 {/* maaaaad tips — Sundere & Billigere */}
                 {selectedRecipe.tips && (
-                  <div className="maaaaad-tips-container" style={{ marginBottom: '20px' }}>
-                    <div className="modal-section-title" style={{ marginTop: '20px' }}>maaaaad tips — Sundere & Billigere</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div 
-                        className="tip-box healthier-tip"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '10px',
-                          backgroundColor: '#F4FAFF',
-                          border: '1px solid rgba(0, 89, 179, 0.1)',
-                          borderRadius: '10px',
-                          padding: '12px 14px'
-                        }}
-                      >
-                        <Sparkles size={16} style={{ color: '#0059B3', flexShrink: 0, marginTop: '2px' }} />
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#0059B3', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Sundere tip</div>
-                          <div style={{ fontSize: '11.5px', color: '#1b3a4b', marginTop: '3px', lineHeight: '1.4' }}>
-                            {selectedRecipe.tips.healthier}
-                          </div>
+                  <div className="maaaaad-tips-container" style={{ marginBottom: '24px' }}>
+                    <div className="modal-section-title" style={{ marginTop: '24px' }}>maaaaad tips — Sundere & Billigere</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div className="tip-card healthier">
+                        <div className="tip-header">
+                          <Sparkles size={14} className="tip-icon" />
+                          <span>SUNDERE ALTERNATIV</span>
+                        </div>
+                        <div className="tip-content">
+                          {selectedRecipe.tips.healthier}
                         </div>
                       </div>
 
-                      <div 
-                        className="tip-box cheaper-tip"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '10px',
-                          backgroundColor: '#E6F6EE',
-                          border: '1px solid rgba(0, 168, 89, 0.1)',
-                          borderRadius: '10px',
-                          padding: '12px 14px'
-                        }}
-                      >
-                        <Tag size={16} style={{ color: '#00A859', flexShrink: 0, marginTop: '2px' }} />
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#00A859', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Billigere tip</div>
-                          <div style={{ fontSize: '11.5px', color: '#1b3d2b', marginTop: '3px', lineHeight: '1.4' }}>
-                            {selectedRecipe.tips.cheaper}
-                          </div>
+                      <div className="tip-card cheaper">
+                        <div className="tip-header">
+                          <Tag size={14} className="tip-icon" />
+                          <span>BILLIGERE BUDGET-TRICK</span>
+                        </div>
+                        <div className="tip-content">
+                          {selectedRecipe.tips.cheaper}
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
 
+                {/* Clickable instructions steps */}
                 <div className="modal-section-title">Fremgangsmåde</div>
-                <div style={{ marginBottom: '20px' }}>
-                  {selectedRecipe.instructions.map((step, idx) => (
-                    <div key={idx} className="instruction-step">
-                      <div className="step-number">{idx + 1}</div>
-                      <div className="step-text">{step}</div>
-                    </div>
-                  ))}
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '12px', fontStyle: 'italic' }}>
+                  Tryk på et trin for at markere det som færdigt
+                </div>
+                <div style={{ marginBottom: '32px' }} className="instructions-list">
+                  {selectedRecipe.instructions.map((step, idx) => {
+                    const isStepDone = !!completedSteps[idx];
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`instruction-step ${isStepDone ? 'completed' : ''}`}
+                        onClick={() => setCompletedSteps(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className={`step-check ${isStepDone ? 'active' : ''}`}>
+                          {isStepDone ? <Check size={10} strokeWidth={3} /> : idx + 1}
+                        </div>
+                        <div className="step-text">{step}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* Bottom Sticky Action Bar with Pricing Summary */}
               <div className="modal-footer">
+                <div className="modal-footer-price-info">
+                  <span className="total-label">Pris i alt</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                    <span className="total-price-val">{stats.totalPrice} kr.</span>
+                    {stats.saving > 0 && (
+                      <span className="total-saving-val">Spar {stats.saving} kr.!</span>
+                    )}
+                  </div>
+                </div>
                 <button 
                   className="btn-primary secondary-style"
                   onClick={() => {
@@ -2271,9 +2358,10 @@ export default function App() {
                     addRecipeToShoppingListWithStrategy(selectedRecipe, modalStrategy, modalSpecificStore);
                     setSelectedRecipe(null);
                   }}
+                  style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '14px', fontWeight: 700 }}
                 >
-                  <ShoppingCart size={16} />
-                  Tilføj ingredienser ({stats.totalPrice} kr.)
+                  <ShoppingCart size={18} />
+                  Føj til indkøbsliste
                 </button>
               </div>
             </div>
